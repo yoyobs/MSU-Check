@@ -405,6 +405,60 @@
         height: 8px;
       }
 
+      .update-toast {
+        position: fixed;
+        right: 22px;
+        bottom: 22px;
+        z-index: 100;
+        display: none;
+        width: min(320px, calc(100vw - 32px));
+        gap: 10px;
+        padding: 16px;
+        border: 1px solid rgba(92, 143, 250, 0.72);
+        border-radius: 8px;
+        background: #0f1724;
+        box-shadow: 0 18px 46px rgba(0, 0, 0, 0.45);
+      }
+
+      .update-toast.visible {
+        display: grid;
+        animation: update-bounce 1.2s ease-in-out infinite;
+      }
+
+      .update-toast-title {
+        color: var(--text);
+        font-size: 16px;
+        font-weight: 700;
+      }
+
+      .update-toast-text {
+        color: var(--muted);
+        font-size: 14px;
+        line-height: 1.45;
+      }
+
+      .update-toast-button {
+        min-height: 38px;
+        border: 0;
+        border-radius: 6px;
+        background: var(--blue);
+        color: #fff;
+        font-size: 14px;
+        font-weight: 700;
+        cursor: pointer;
+      }
+
+      @keyframes update-bounce {
+        0%,
+        100% {
+          transform: translateY(0);
+        }
+
+        50% {
+          transform: translateY(-8px);
+        }
+      }
+
       @media (max-width: 1040px) {
         .layout {
           grid-template-columns: 1fr;
@@ -451,6 +505,12 @@
         .transaction-amount,
         .history-amount {
           white-space: normal;
+        }
+
+        .update-toast {
+          right: 12px;
+          bottom: 12px;
+          width: calc(100vw - 24px);
         }
       }
     </style>
@@ -540,12 +600,20 @@
       </div>
     </main>
 
+    <div id="update-toast" class="update-toast" role="status" aria-live="polite">
+      <div class="update-toast-title">网站已经更新</div>
+      <div class="update-toast-text">请刷新页面，重新载入最新版本。</div>
+      <button id="reload-page" class="update-toast-button" type="button">刷新页面</button>
+    </div>
+
     <script>
       const form = document.querySelector('#checker-form');
       const button = document.querySelector('#submit');
       const result = document.querySelector('#result');
       const historyList = document.querySelector('#history-list');
       const historyState = document.querySelector('#history-state');
+      const updateToast = document.querySelector('#update-toast');
+      const reloadPageButton = document.querySelector('#reload-page');
       const selects = {
         sender: document.querySelector('[data-role="sender"]'),
         receiver: document.querySelector('[data-role="receiver"]'),
@@ -557,6 +625,9 @@
         receiver: null,
         historyTimer: null,
         historyLoading: false,
+        appVersion: null,
+        versionTimer: null,
+        updateVisible: false,
       };
 
       const escapeHtml = (value) => String(value ?? '')
@@ -731,6 +802,38 @@
         }
       };
 
+      const showUpdateToast = () => {
+        if (state.updateVisible) return;
+        state.updateVisible = true;
+        updateToast.classList.add('visible');
+      };
+
+      const checkAppVersion = async () => {
+        try {
+          const response = await fetch('/api/version', {
+            cache: 'no-store',
+          });
+          const data = await response.json();
+
+          if (!data.version) return;
+
+          if (!state.appVersion) {
+            state.appVersion = data.version;
+            return;
+          }
+
+          if (data.version !== state.appVersion) {
+            showUpdateToast();
+          }
+        } catch {
+          // 版本检测失败不影响查账功能。
+        }
+      };
+
+      reloadPageButton.addEventListener('click', () => {
+        window.location.reload();
+      });
+
       form.addEventListener('submit', async (event) => {
         event.preventDefault();
 
@@ -768,7 +871,9 @@
 
       loadAddressBook();
       loadHistory();
+      checkAppVersion();
       state.historyTimer = window.setInterval(loadHistory, 15000);
+      state.versionTimer = window.setInterval(checkAppVersion, 30000);
     </script>
   </body>
 </html>

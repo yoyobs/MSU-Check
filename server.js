@@ -2,7 +2,7 @@ import { createServer } from 'node:http';
 import { readFile } from 'node:fs/promises';
 import { extname, isAbsolute, join, normalize, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { webcrypto } from 'node:crypto';
+import { createHash, webcrypto } from 'node:crypto';
 import XLSX from 'xlsx';
 
 const API_BASE = 'https://api-gateway.xangle.io';
@@ -19,6 +19,11 @@ const BODY_LIMIT = 1024 * 1024;
 const rootDir = fileURLToPath(new URL('.', import.meta.url));
 const publicDir = join(rootDir, 'public');
 const addressBookPath = join(rootDir, 'data', 'address-book.xlsx');
+
+let appVersionCache = {
+  value: '',
+  expiresAt: 0,
+};
 
 let secretCache = {
   key: '',
@@ -57,6 +62,35 @@ const readJsonBody = async (req) => {
 
   if (!chunks.length) return {};
   return JSON.parse(Buffer.concat(chunks).toString('utf8'));
+};
+
+const getAppVersion = async () => {
+  if (appVersionCache.value && Date.now() < appVersionCache.expiresAt) {
+    return appVersionCache.value;
+  }
+
+  const files = [
+    join(rootDir, 'server.js'),
+    join(rootDir, 'package.json'),
+    join(publicDir, 'index.html'),
+    addressBookPath,
+  ];
+  const hash = createHash('sha256');
+
+  for (const file of files) {
+    try {
+      hash.update(await readFile(file));
+    } catch {
+      hash.update(file);
+    }
+  }
+
+  appVersionCache = {
+    value: hash.digest('hex').slice(0, 16),
+    expiresAt: Date.now() + 10 * 1000,
+  };
+
+  return appVersionCache.value;
 };
 
 const randomHash = () => {
@@ -406,6 +440,20 @@ const handleHistory = async (res) => {
   }
 };
 
+const handleVersion = async (res) => {
+  try {
+    json(res, 200, {
+      version: await getAppVersion(),
+    });
+  } catch (error) {
+    json(res, 500, {
+      version: '',
+      message: '读取网站版本失败。',
+      detail: error.message,
+    });
+  }
+};
+
 const serveAddressBookFile = async (req, res) => {
   try {
     const data = await readFile(addressBookPath);
@@ -478,6 +526,11 @@ const server = createServer(async (req, res) => {
 
   if (req.method === 'GET' && url.pathname === '/api/history') {
     await handleHistory(res);
+    return;
+  }
+
+  if (req.method === 'GET' && url.pathname === '/api/version') {
+    await handleVersion(res);
     return;
   }
 
