@@ -46,7 +46,8 @@
       }
 
       h1,
-      h2 {
+      h2,
+      h3 {
         margin: 0;
         line-height: 1.2;
         letter-spacing: 0;
@@ -60,16 +61,40 @@
         font-size: 18px;
       }
 
+      h3 {
+        font-size: 15px;
+      }
+
       .nav-links {
         display: flex;
-        gap: 14px;
+        gap: 10px;
         font-size: 14px;
       }
 
-      .nav-links a,
-      .history-card a {
-        color: var(--blue);
+      .top-action {
+        min-height: 40px;
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: #0f1724;
+        color: var(--text);
+        padding: 0 14px;
         text-decoration: none;
+        font-weight: 700;
+        white-space: nowrap;
+      }
+
+      .top-action:hover {
+        border-color: rgba(92, 143, 250, 0.75);
+        background: var(--panel-2);
+      }
+
+      .top-action.primary-link {
+        border-color: rgba(92, 143, 250, 0.65);
+        background: rgba(92, 143, 250, 0.16);
+        color: #dce7ff;
       }
 
       .layout {
@@ -84,6 +109,11 @@
         border: 1px solid var(--line);
         border-radius: 8px;
         padding: 24px;
+      }
+
+      .left-stack {
+        display: grid;
+        gap: 18px;
       }
 
       form {
@@ -239,10 +269,38 @@
 
       .hint,
       .summary,
-      .history-meta {
+      .history-meta,
+      .guide-list {
         color: var(--muted);
         font-size: 13px;
         line-height: 1.5;
+      }
+
+      .guide {
+        background: var(--panel);
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        padding: 18px;
+      }
+
+      .guide-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 16px;
+      }
+
+      .guide-block {
+        display: grid;
+        gap: 10px;
+      }
+
+      .guide-list {
+        margin: 0;
+        padding-left: 18px;
+      }
+
+      .guide-list li + li {
+        margin-top: 6px;
       }
 
       .result {
@@ -368,7 +426,8 @@
           flex-wrap: wrap;
         }
 
-        form {
+        form,
+        .guide-grid {
           grid-template-columns: 1fr;
         }
 
@@ -376,8 +435,10 @@
           grid-column: auto;
         }
 
-        button.primary {
+        button.primary,
+        .top-action {
           width: 100%;
+          justify-content: center;
         }
 
         .transaction,
@@ -397,48 +458,73 @@
       <div class="topbar">
         <h1>MSU 查账</h1>
         <nav class="nav-links" aria-label="页面导航">
-          <a href="/address-book.xlsx">下载地址名单</a>
-          <a href="https://msu-explorer.xangle.io/" target="_blank" rel="noreferrer">打开 Explorer</a>
+          <a class="top-action primary-link" href="/address-book.xlsx">地址名单</a>
+          <a class="top-action" href="https://msu-explorer.xangle.io/" target="_blank" rel="noreferrer">Explorer</a>
         </nav>
       </div>
 
       <div class="layout">
-        <section class="panel">
-          <form id="checker-form">
-            <div class="field">
-              <span>发送者的地址</span>
-              <div class="custom-select" data-role="sender">
-                <button class="select-button" type="button" aria-haspopup="listbox" aria-expanded="false">
-                  <span class="select-text">
-                    <span class="select-name">请选择发送者</span>
-                    <span class="select-address">从地址名单 Excel 读取</span>
-                  </span>
-                </button>
-                <div class="select-menu" role="listbox"></div>
+        <div class="left-stack">
+          <section class="panel">
+            <form id="checker-form">
+              <div class="field">
+                <span>发送者的地址</span>
+                <div class="custom-select" data-role="sender">
+                  <button class="select-button" type="button" aria-haspopup="listbox" aria-expanded="false">
+                    <span class="select-text">
+                      <span class="select-name">请选择发送者</span>
+                      <span class="select-address">从地址名单 Excel 读取</span>
+                    </span>
+                  </button>
+                  <div class="select-menu" role="listbox"></div>
+                </div>
+              </div>
+
+              <div class="field">
+                <span>接收者的地址</span>
+                <div class="custom-select" data-role="receiver">
+                  <button class="select-button" type="button" aria-haspopup="listbox" aria-expanded="false">
+                    <span class="select-text">
+                      <span class="select-name">请选择接收者</span>
+                      <span class="select-address">从地址名单 Excel 读取</span>
+                    </span>
+                  </button>
+                  <div class="select-menu" role="listbox"></div>
+                </div>
+              </div>
+
+              <div class="actions">
+                <span class="hint">选择发送者和接收者后，只查询这两个地址之间最近 2 笔交易。</span>
+                <button id="submit" class="primary" type="submit">查询最近交易</button>
+              </div>
+            </form>
+
+            <div id="result" class="result" aria-live="polite"></div>
+          </section>
+
+          <section class="guide">
+            <div class="guide-grid">
+              <div class="guide-block">
+                <h3>使用方法</h3>
+                <ol class="guide-list">
+                  <li>在 Excel 地址名单里维护昵称和钱包地址。</li>
+                  <li>更新名单或代码后，双击“一键更新.bat”发布到网站。</li>
+                  <li>在左侧选择发送者和接收者，点击查询最近交易。</li>
+                  <li>右侧历史记录会自动刷新，显示名单内地址之间的互转。</li>
+                </ol>
+              </div>
+              <div class="guide-block">
+                <h3>注意事项</h3>
+                <ul class="guide-list">
+                  <li>Excel 只保留两列：昵称、地址；地址需要是完整 0x 地址。</li>
+                  <li>网站只显示 Excel 名单内地址之间的交易。</li>
+                  <li>历史列表每 15 秒刷新一次，Explorer 数据可能有短暂延迟。</li>
+                  <li>如果名单改完没有生效，确认已经提交并推送到 GitHub。</li>
+                </ul>
               </div>
             </div>
-
-            <div class="field">
-              <span>接收者的地址</span>
-              <div class="custom-select" data-role="receiver">
-                <button class="select-button" type="button" aria-haspopup="listbox" aria-expanded="false">
-                  <span class="select-text">
-                    <span class="select-name">请选择接收者</span>
-                    <span class="select-address">从地址名单 Excel 读取</span>
-                  </span>
-                </button>
-                <div class="select-menu" role="listbox"></div>
-              </div>
-            </div>
-
-            <div class="actions">
-              <span class="hint">选择发送者和接收者后，只查询这两个地址之间最近 2 笔交易。</span>
-              <button id="submit" class="primary" type="submit">查询最近交易</button>
-            </div>
-          </form>
-
-          <div id="result" class="result" aria-live="polite"></div>
-        </section>
+          </section>
+        </div>
 
         <aside class="panel">
           <div class="history-head">
