@@ -297,6 +297,8 @@
       .guide-list {
         margin: 0;
         padding-left: 18px;
+        font-size: 14px;
+        font-weight: 700;
       }
 
       .guide-list li + li {
@@ -467,11 +469,11 @@
           <section class="panel">
             <form id="checker-form">
               <div class="field">
-                <span>发送者的地址</span>
+                <span>交易者A</span>
                 <div class="custom-select" data-role="sender">
                   <button class="select-button" type="button" aria-haspopup="listbox" aria-expanded="false">
                     <span class="select-text">
-                      <span class="select-name">请选择发送者</span>
+                      <span class="select-name">请选择交易者A</span>
                       <span class="select-address">从系统名单中选择</span>
                     </span>
                   </button>
@@ -480,11 +482,11 @@
               </div>
 
               <div class="field">
-                <span>接收者的地址</span>
+                <span>交易者B</span>
                 <div class="custom-select" data-role="receiver">
                   <button class="select-button" type="button" aria-haspopup="listbox" aria-expanded="false">
                     <span class="select-text">
-                      <span class="select-name">请选择接收者</span>
+                      <span class="select-name">请选择交易者B</span>
                       <span class="select-address">从系统名单中选择</span>
                     </span>
                   </button>
@@ -493,7 +495,7 @@
               </div>
 
               <div class="actions">
-                <span class="hint">选择发送者和接收者后，只查询这两个地址之间最近 2 笔交易。</span>
+                <span class="hint">选择交易者A和交易者B后，只查询这两个地址之间最近 2 笔交易。</span>
                 <button id="submit" class="primary" type="submit">查询最近交易</button>
               </div>
             </form>
@@ -506,7 +508,7 @@
               <div class="guide-block">
                 <h3>使用方法</h3>
                 <ol class="guide-list">
-                  <li>先在左侧选择发送者和接收者。</li>
+                  <li>先在左侧选择交易者A和交易者B。</li>
                   <li>点击查询最近交易，查看这两个地址之间最近 2 笔记录。</li>
                   <li>右侧转账历史会自动刷新，显示系统名单内地址之间的互转。</li>
                   <li>点击任意交易记录，可以打开 Explorer 查看详情。</li>
@@ -575,7 +577,7 @@
 
         if (!item) {
           buttonText.innerHTML = `
-            <span class="select-name">${role === 'sender' ? '请选择发送者' : '请选择接收者'}</span>
+            <span class="select-name">${role === 'sender' ? '请选择交易者A' : '请选择交易者B'}</span>
             <span class="select-address">从系统名单中选择</span>
           `;
           return;
@@ -734,7 +736,7 @@
 
         if (!state.sender || !state.receiver) {
           result.className = 'result visible missing';
-          result.innerHTML = '<div class="status"><span class="dot"></span>请先选择发送者和接收者。</div>';
+          result.innerHTML = '<div class="status"><span class="dot"></span>请先选择交易者A和交易者B。</div>';
           return;
         }
 
