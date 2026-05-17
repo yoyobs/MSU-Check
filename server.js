@@ -12,6 +12,8 @@ const PORT = Number(process.env.PORT || 3000);
 const MAX_PAGES = Number(process.env.MAX_PAGES || 20);
 const PAGE_SIZE = Number(process.env.PAGE_SIZE || 25);
 const RECENT_LIMIT = 2;
+const HISTORY_LIMIT = 30;
+const HISTORY_PAGE_LIMIT = 2;
 const BODY_LIMIT = 1024 * 1024;
 
 const rootDir = fileURLToPath(new URL('.', import.meta.url));
@@ -183,6 +185,27 @@ const mapTransaction = (trx) => ({
   explorerUrl: `${EXPLORER_ORIGIN}/transactions/${trx.TRXHA}`,
 });
 
+const buildAddressLookup = (addresses) => {
+  const lookup = new Map();
+
+  for (const item of addresses) {
+    lookup.set(normalizeAddress(item.address), item);
+  }
+
+  return lookup;
+};
+
+const withBookNames = (transaction, lookup) => {
+  const fromBook = lookup.get(normalizeAddress(transaction.from));
+  const toBook = lookup.get(normalizeAddress(transaction.to));
+
+  return {
+    ...transaction,
+    fromNickname: fromBook?.nickname || transaction.fromName || '',
+    toNickname: toBook?.nickname || transaction.toName || '',
+  };
+};
+
 const listRecentPayments = async ({ sender, receiver }) => {
   const senderAddress = normalizeAddress(sender);
   const receiverAddress = normalizeAddress(receiver);
@@ -227,6 +250,67 @@ const listRecentPayments = async ({ sender, receiver }) => {
     found: matches.length > 0,
     message: matches.length ? '已找到最近交易' : '还没收到钱',
     transactions: matches,
+    checked,
+  };
+};
+
+const listAddressBookHistory = async () => {
+  const { addresses } = await readAddressBook();
+  const lookup = buildAddressLookup(addresses);
+  const addressSet = new Set(lookup.keys());
+
+  if (addressSet.size < 2) {
+    return {
+      transactions: [],
+      checked: {
+        addresses: addressSet.size,
+        pages: 0,
+        transactions: 0,
+      },
+    };
+  }
+
+  const checked = {
+    addresses: addressSet.size,
+    pages: 0,
+    transactions: 0,
+  };
+  const byHash = new Map();
+
+  for (const item of addresses) {
+    const address = normalizeAddress(item.address);
+
+    for (let page = 1; page <= HISTORY_PAGE_LIMIT; page += 1) {
+      const data = await explorerPost('/api/address/transaction/list', {
+        address,
+        page,
+        size: PAGE_SIZE,
+      });
+
+      const list = Array.isArray(data.TRXLIST) ? data.TRXLIST : [];
+      checked.pages += 1;
+      checked.transactions += list.length;
+
+      for (const trx of list) {
+        const from = normalizeAddress(trx.ADDRSFROMINFO?.ADDR);
+        const to = normalizeAddress(trx.ADDRSTOINFO?.ADDR);
+
+        if (from && to && from !== to && addressSet.has(from) && addressSet.has(to)) {
+          const transaction = withBookNames(mapTransaction(trx), lookup);
+          byHash.set(transaction.hash, transaction);
+        }
+      }
+
+      if (list.length < PAGE_SIZE) break;
+    }
+  }
+
+  const transactions = Array.from(byHash.values())
+    .sort((a, b) => (Number(b.timestamp) || 0) - (Number(a.timestamp) || 0))
+    .slice(0, HISTORY_LIMIT);
+
+  return {
+    transactions,
     checked,
   };
 };
@@ -309,6 +393,19 @@ const handleGetAddressBook = async (res) => {
   }
 };
 
+const handleHistory = async (res) => {
+  try {
+    const result = await listAddressBookHistory();
+    json(res, 200, result);
+  } catch (error) {
+    json(res, 500, {
+      transactions: [],
+      message: '读取转账历史失败。',
+      detail: error.message,
+    });
+  }
+};
+
 const serveAddressBookFile = async (req, res) => {
   try {
     const data = await readFile(addressBookPath);
@@ -376,6 +473,11 @@ const server = createServer(async (req, res) => {
 
   if (req.method === 'GET' && url.pathname === '/api/address-book') {
     await handleGetAddressBook(res);
+    return;
+  }
+
+  if (req.method === 'GET' && url.pathname === '/api/history') {
+    await handleHistory(res);
     return;
   }
 
