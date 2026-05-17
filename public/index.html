@@ -1,0 +1,323 @@
+<!doctype html>
+<html lang="zh-Hant">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>MSU 查账</title>
+    <style>
+      :root {
+        color-scheme: dark;
+        --bg: #101828;
+        --panel: #182232;
+        --panel-2: #202b3d;
+        --line: #334155;
+        --text: #e5edf8;
+        --muted: #9fb0c8;
+        --blue: #5c8ffa;
+        --green: #47d18c;
+        --red: #ff6b7a;
+        --yellow: #f5c451;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        min-height: 100vh;
+        background: var(--bg);
+        color: var(--text);
+        font-family: Arial, "Noto Sans TC", "Microsoft JhengHei", sans-serif;
+      }
+
+      main {
+        width: min(960px, calc(100% - 32px));
+        margin: 0 auto;
+        padding: 48px 0;
+      }
+
+      .topbar {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 16px;
+        margin-bottom: 24px;
+      }
+
+      h1 {
+        margin: 0;
+        font-size: 28px;
+        line-height: 1.2;
+        letter-spacing: 0;
+      }
+
+      .explorer-link {
+        color: var(--blue);
+        text-decoration: none;
+        font-size: 14px;
+      }
+
+      .checker {
+        background: var(--panel);
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        padding: 24px;
+      }
+
+      form {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 18px;
+      }
+
+      label {
+        display: grid;
+        gap: 8px;
+        color: var(--muted);
+        font-size: 14px;
+      }
+
+      label.amount {
+        grid-column: span 1;
+      }
+
+      input {
+        width: 100%;
+        min-height: 44px;
+        border: 1px solid var(--line);
+        border-radius: 6px;
+        background: #0f1724;
+        color: var(--text);
+        padding: 10px 12px;
+        font-size: 15px;
+        outline: none;
+      }
+
+      input:focus {
+        border-color: var(--blue);
+        box-shadow: 0 0 0 3px rgba(92, 143, 250, 0.18);
+      }
+
+      .actions {
+        grid-column: span 2;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 16px;
+        margin-top: 4px;
+      }
+
+      button {
+        min-height: 44px;
+        border: 0;
+        border-radius: 6px;
+        background: var(--blue);
+        color: white;
+        padding: 0 22px;
+        font-size: 15px;
+        font-weight: 700;
+        cursor: pointer;
+      }
+
+      button:disabled {
+        cursor: wait;
+        opacity: 0.72;
+      }
+
+      .hint {
+        color: var(--muted);
+        font-size: 13px;
+      }
+
+      .result {
+        display: none;
+        margin-top: 18px;
+        border-radius: 8px;
+        padding: 18px;
+        background: var(--panel-2);
+        border: 1px solid var(--line);
+      }
+
+      .result.visible {
+        display: block;
+      }
+
+      .result.found {
+        border-color: rgba(71, 209, 140, 0.5);
+      }
+
+      .result.missing {
+        border-color: rgba(255, 107, 122, 0.45);
+      }
+
+      .status {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        margin-bottom: 12px;
+        font-size: 20px;
+        font-weight: 700;
+      }
+
+      .dot {
+        width: 10px;
+        height: 10px;
+        border-radius: 999px;
+        background: var(--yellow);
+      }
+
+      .found .dot {
+        background: var(--green);
+      }
+
+      .missing .dot {
+        background: var(--red);
+      }
+
+      .details {
+        display: grid;
+        grid-template-columns: 120px 1fr;
+        gap: 10px 14px;
+        color: var(--muted);
+        font-size: 14px;
+      }
+
+      .details strong,
+      .details a {
+        min-width: 0;
+        color: var(--text);
+        word-break: break-all;
+      }
+
+      .details a {
+        color: var(--blue);
+      }
+
+      @media (max-width: 720px) {
+        main {
+          width: min(100% - 24px, 960px);
+          padding: 28px 0;
+        }
+
+        .topbar,
+        .actions {
+          align-items: stretch;
+          flex-direction: column;
+        }
+
+        form,
+        .details {
+          grid-template-columns: 1fr;
+        }
+
+        label.amount,
+        .actions {
+          grid-column: auto;
+        }
+
+        button {
+          width: 100%;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <div class="topbar">
+        <h1>MSU 查账</h1>
+        <a class="explorer-link" href="https://msu-explorer.xangle.io/" target="_blank" rel="noreferrer">打开 Explorer</a>
+      </div>
+
+      <section class="checker">
+        <form id="checker-form">
+          <label>
+            发送者的地址
+            <input id="sender" name="sender" autocomplete="off" placeholder="0x..." required>
+          </label>
+
+          <label>
+            接收者的地址
+            <input id="receiver" name="receiver" autocomplete="off" placeholder="0x..." required>
+          </label>
+
+          <label class="amount">
+            金额
+            <input id="amount" name="amount" inputmode="decimal" autocomplete="off" placeholder="例如 10 或 10.5" required>
+          </label>
+
+          <div class="actions">
+            <span class="hint">查询接收者最近交易，匹配发送者、接收者和 NXPC 金额。</span>
+            <button id="submit" type="submit">查询</button>
+          </div>
+        </form>
+
+        <div id="result" class="result" aria-live="polite"></div>
+      </section>
+    </main>
+
+    <script>
+      const form = document.querySelector('#checker-form');
+      const button = document.querySelector('#submit');
+      const result = document.querySelector('#result');
+
+      const field = (id) => document.querySelector(id).value.trim();
+
+      const renderResult = (data) => {
+        result.className = `result visible ${data.found ? 'found' : 'missing'}`;
+
+        if (!data.found) {
+          result.innerHTML = `
+            <div class="status"><span class="dot"></span>${data.message || '还没收到钱'}</div>
+            <div class="details">
+              <span>已检查</span><strong>${data.checked?.transactions || 0} 笔交易</strong>
+            </div>
+          `;
+          return;
+        }
+
+        const trx = data.transaction;
+        result.innerHTML = `
+          <div class="status"><span class="dot"></span>${data.message || '已收到钱'}</div>
+          <div class="details">
+            <span>交易 Hash</span><a href="${trx.explorerUrl}" target="_blank" rel="noreferrer">${trx.hash}</a>
+            <span>金额</span><strong>${trx.amount} NXPC</strong>
+            <span>发送者</span><strong>${trx.from}</strong>
+            <span>接收者</span><strong>${trx.to}</strong>
+            <span>时间</span><strong>${trx.age || '-'}</strong>
+            <span>区块</span><strong>${trx.blockNumber || '-'}</strong>
+          </div>
+        `;
+      };
+
+      form.addEventListener('submit', async (event) => {
+        event.preventDefault();
+        button.disabled = true;
+        button.textContent = '查询中...';
+        result.className = 'result visible';
+        result.innerHTML = '<div class="status"><span class="dot"></span>正在查询</div>';
+
+        try {
+          const response = await fetch('/api/search', {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({
+              sender: field('#sender'),
+              receiver: field('#receiver'),
+              amount: field('#amount'),
+            }),
+          });
+
+          const data = await response.json();
+          renderResult(data);
+        } catch (error) {
+          result.className = 'result visible missing';
+          result.innerHTML = '<div class="status"><span class="dot"></span>查询失败，请稍后再试。</div>';
+        } finally {
+          button.disabled = false;
+          button.textContent = '查询';
+        }
+      });
+    </script>
+  </body>
+</html>
