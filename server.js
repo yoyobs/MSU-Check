@@ -548,6 +548,6 @@ const server = createServer(async (req, res) => {
 });
 
 server.listen(PORT, () => {
-  console.log(`MSU payment checker running at http://localhost:${PORT}`);
+  console.log(`大锅菜查账专用网 running at http://localhost:${PORT}`);
   console.log(`Address book Excel: ${addressBookPath}`);
 });
