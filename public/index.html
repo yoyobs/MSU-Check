@@ -99,7 +99,7 @@
 
       .layout {
         display: grid;
-        grid-template-columns: minmax(760px, 1fr) minmax(320px, 0.48fr);
+        grid-template-columns: minmax(420px, 0.58fr) minmax(620px, 1.42fr);
         gap: 22px;
         align-items: start;
       }
@@ -118,7 +118,7 @@
 
       form {
         display: grid;
-        grid-template-columns: 1fr 1fr;
+        grid-template-columns: 1fr;
         gap: 18px;
       }
 
@@ -250,11 +250,10 @@
       }
 
       .actions {
-        grid-column: span 2;
         display: flex;
-        align-items: center;
-        justify-content: space-between;
-        gap: 16px;
+        align-items: stretch;
+        flex-direction: column;
+        gap: 12px;
         margin-top: 4px;
       }
 
@@ -268,6 +267,7 @@
         font-size: 15px;
         font-weight: 700;
         cursor: pointer;
+        width: 100%;
       }
 
       button.primary:disabled {
