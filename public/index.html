@@ -176,6 +176,19 @@
         line-height: 1.3;
       }
 
+      .history-from {
+        color: var(--red);
+      }
+
+      .history-to {
+        color: var(--green);
+      }
+
+      .history-arrow {
+        color: var(--muted);
+        font-weight: 700;
+      }
+
       .select-address,
       .history-sub,
       .history-hash {
@@ -597,7 +610,11 @@
         historyList.innerHTML = data.transactions.map((trx) => `
           <a class="history-card" href="${escapeHtml(trx.explorerUrl)}" target="_blank" rel="noreferrer">
             <span class="history-main">
-              <span class="history-title">${escapeHtml(trx.fromNickname || trx.from)} → ${escapeHtml(trx.toNickname || trx.to)}</span>
+              <span class="history-title">
+                <span class="history-from">${escapeHtml(trx.fromNickname || trx.from)}</span>
+                <span class="history-arrow">→</span>
+                <span class="history-to">${escapeHtml(trx.toNickname || trx.to)}</span>
+              </span>
               <span class="history-sub">${escapeHtml(trx.age || '时间未知')} · 区块 ${escapeHtml(trx.blockNumber || '-')}</span>
               <span class="history-hash">${escapeHtml(trx.hash)}</span>
             </span>
