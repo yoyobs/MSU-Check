@@ -599,7 +599,7 @@
           <div class="history-head">
             <div>
               <h2>实时转账历史</h2>
-              <div class="history-meta">仅显示系统名单内地址之间的互转记录。</div>
+              <div class="history-meta">显示最近 7 天内，系统名单地址之间的互转记录。</div>
             </div>
             <div id="history-state" class="history-state"><span class="dot"></span>准备刷新</div>
           </div>
@@ -647,6 +647,13 @@
 
       const setHistoryState = (text) => {
         historyState.innerHTML = `<span class="dot"></span>${escapeHtml(text)}`;
+      };
+
+      const renderHistoryCheckSummary = (checked) => {
+        const addresses = checked?.addresses || 0;
+        const transactions = checked?.transactions || 0;
+        const days = checked?.days || 7;
+        return `已检查系统名单内 ${addresses} 个地址的 ${days} 天内交易，共扫描 ${transactions} 笔。`;
       };
 
       const renderSelected = (role) => {
@@ -776,7 +783,12 @@
 
       const renderHistory = (data) => {
         if (!data.transactions?.length) {
-          historyList.innerHTML = '<div class="empty-options">暂无系统名单内互转记录。</div>';
+          historyList.innerHTML = `
+            <div class="empty-options">
+              最近 ${escapeHtml(data.checked?.days || 7)} 天内暂无系统名单内互转记录。<br>
+              ${escapeHtml(renderHistoryCheckSummary(data.checked))}
+            </div>
+          `;
           return;
         }
 
@@ -789,7 +801,9 @@
             </span>
             <span class="history-amount">${escapeHtml(trx.amount)} NXPC</span>
           </a>
-        `).join('');
+        `).join('') + `
+          <div class="empty-options">${escapeHtml(renderHistoryCheckSummary(data.checked))}</div>
+        `;
       };
 
       const loadHistory = async () => {

@@ -12,8 +12,10 @@ const PORT = Number(process.env.PORT || 3000);
 const MAX_PAGES = Number(process.env.MAX_PAGES || 20);
 const PAGE_SIZE = Number(process.env.PAGE_SIZE || 25);
 const RECENT_LIMIT = 2;
-const HISTORY_LIMIT = 30;
-const HISTORY_PAGE_LIMIT = 2;
+const HISTORY_LIMIT = Number(process.env.HISTORY_LIMIT || 200);
+const HISTORY_WINDOW_DAYS = Number(process.env.HISTORY_WINDOW_DAYS || 7);
+const HISTORY_CACHE_MS = Number(process.env.HISTORY_CACHE_MS || 60 * 1000);
+const HISTORY_ADDRESS_CONCURRENCY = Number(process.env.HISTORY_ADDRESS_CONCURRENCY || 8);
 const BODY_LIMIT = 1024 * 1024;
 
 const rootDir = fileURLToPath(new URL('.', import.meta.url));
@@ -27,6 +29,11 @@ let appVersionCache = {
 
 let secretCache = {
   key: '',
+  expiresAt: 0,
+};
+
+let historyCache = {
+  value: null,
   expiresAt: 0,
 };
 
@@ -240,6 +247,54 @@ const withBookNames = (transaction, lookup) => {
   };
 };
 
+const timestampToMs = (timestamp) => {
+  const value = Number(timestamp);
+  if (!Number.isFinite(value) || value <= 0) return 0;
+  return value < 10_000_000_000 ? value * 1000 : value;
+};
+
+const scanAddressHistory = async ({ address, sinceMs, addressSet, lookup }) => {
+  const transactions = [];
+  const checked = {
+    pages: 0,
+    transactions: 0,
+  };
+
+  for (let page = 1; ; page += 1) {
+    const data = await explorerPost('/api/address/transaction/list', {
+      address,
+      page,
+      size: PAGE_SIZE,
+    });
+
+    const list = Array.isArray(data.TRXLIST) ? data.TRXLIST : [];
+    checked.pages += 1;
+    checked.transactions += list.length;
+
+    let hasRecentTransaction = false;
+
+    for (const trx of list) {
+      const timestampMs = timestampToMs(trx.UT);
+      if (timestampMs >= sinceMs) hasRecentTransaction = true;
+      if (!timestampMs || timestampMs < sinceMs) continue;
+
+      const from = normalizeAddress(trx.ADDRSFROMINFO?.ADDR);
+      const to = normalizeAddress(trx.ADDRSTOINFO?.ADDR);
+
+      if (from && to && from !== to && addressSet.has(from) && addressSet.has(to)) {
+        transactions.push(withBookNames(mapTransaction(trx), lookup));
+      }
+    }
+
+    if (list.length < PAGE_SIZE || !hasRecentTransaction) break;
+  }
+
+  return {
+    transactions,
+    checked,
+  };
+};
+
 const listRecentPayments = async ({ sender, receiver }) => {
   const senderAddress = normalizeAddress(sender);
   const receiverAddress = normalizeAddress(receiver);
@@ -289,9 +344,15 @@ const listRecentPayments = async ({ sender, receiver }) => {
 };
 
 const listAddressBookHistory = async () => {
+  if (historyCache.value && Date.now() < historyCache.expiresAt) {
+    return historyCache.value;
+  }
+
   const { addresses } = await readAddressBook();
   const lookup = buildAddressLookup(addresses);
   const addressSet = new Set(lookup.keys());
+  const uniqueAddresses = Array.from(addressSet);
+  const sinceMs = Date.now() - HISTORY_WINDOW_DAYS * 24 * 60 * 60 * 1000;
 
   if (addressSet.size < 2) {
     return {
@@ -300,6 +361,7 @@ const listAddressBookHistory = async () => {
         addresses: addressSet.size,
         pages: 0,
         transactions: 0,
+        days: HISTORY_WINDOW_DAYS,
       },
     };
   }
@@ -308,45 +370,44 @@ const listAddressBookHistory = async () => {
     addresses: addressSet.size,
     pages: 0,
     transactions: 0,
+    days: HISTORY_WINDOW_DAYS,
   };
   const byHash = new Map();
 
-  for (const item of addresses) {
-    const address = normalizeAddress(item.address);
+  for (let index = 0; index < uniqueAddresses.length; index += HISTORY_ADDRESS_CONCURRENCY) {
+    const batch = uniqueAddresses.slice(index, index + HISTORY_ADDRESS_CONCURRENCY);
+    const results = await Promise.all(batch.map((address) => scanAddressHistory({
+      address,
+      sinceMs,
+      addressSet,
+      lookup,
+    })));
 
-    for (let page = 1; page <= HISTORY_PAGE_LIMIT; page += 1) {
-      const data = await explorerPost('/api/address/transaction/list', {
-        address,
-        page,
-        size: PAGE_SIZE,
-      });
+    for (const result of results) {
+      checked.pages += result.checked.pages;
+      checked.transactions += result.checked.transactions;
 
-      const list = Array.isArray(data.TRXLIST) ? data.TRXLIST : [];
-      checked.pages += 1;
-      checked.transactions += list.length;
-
-      for (const trx of list) {
-        const from = normalizeAddress(trx.ADDRSFROMINFO?.ADDR);
-        const to = normalizeAddress(trx.ADDRSTOINFO?.ADDR);
-
-        if (from && to && from !== to && addressSet.has(from) && addressSet.has(to)) {
-          const transaction = withBookNames(mapTransaction(trx), lookup);
-          byHash.set(transaction.hash, transaction);
-        }
+      for (const transaction of result.transactions) {
+        byHash.set(transaction.hash, transaction);
       }
-
-      if (list.length < PAGE_SIZE) break;
     }
   }
 
   const transactions = Array.from(byHash.values())
-    .sort((a, b) => (Number(b.timestamp) || 0) - (Number(a.timestamp) || 0))
+    .sort((a, b) => timestampToMs(b.timestamp) - timestampToMs(a.timestamp))
     .slice(0, HISTORY_LIMIT);
 
-  return {
+  const result = {
     transactions,
     checked,
   };
+
+  historyCache = {
+    value: result,
+    expiresAt: Date.now() + HISTORY_CACHE_MS,
+  };
+
+  return result;
 };
 
 const sanitizeAddressEntry = (entry, rowNumber) => {
