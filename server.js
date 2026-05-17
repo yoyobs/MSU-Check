@@ -11,7 +11,7 @@ const CHAIN = 'NEXON';
 const PORT = Number(process.env.PORT || 3000);
 const MAX_PAGES = Number(process.env.MAX_PAGES || 20);
 const PAGE_SIZE = Number(process.env.PAGE_SIZE || 25);
-const RECENT_LIMIT = 10;
+const RECENT_LIMIT = 2;
 const BODY_LIMIT = 1024 * 1024;
 
 const rootDir = fileURLToPath(new URL('.', import.meta.url));
