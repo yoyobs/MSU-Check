@@ -99,7 +99,7 @@
 
       .layout {
         display: grid;
-        grid-template-columns: minmax(480px, 0.92fr) minmax(420px, 1.08fr);
+        grid-template-columns: minmax(760px, 1fr) minmax(320px, 0.48fr);
         gap: 22px;
         align-items: start;
       }
@@ -191,6 +191,14 @@
         font-size: 12px;
         line-height: 1.4;
         word-break: break-all;
+      }
+
+      .select-address {
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        word-break: normal;
       }
 
       .select-menu {
@@ -459,7 +467,7 @@
         }
       }
 
-      @media (max-width: 1040px) {
+      @media (max-width: 1160px) {
         .layout {
           grid-template-columns: 1fr;
         }
