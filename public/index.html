@@ -116,69 +116,60 @@
         gap: 18px;
       }
 
-      form {
-        display: grid;
-        grid-template-columns: 1fr;
-        gap: 18px;
+      .list-panel-title {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 12px;
+        margin-bottom: 14px;
       }
 
-      .field {
+      .address-count {
+        color: var(--muted);
+        font-size: 13px;
+        white-space: nowrap;
+      }
+
+      .address-list {
         display: grid;
         gap: 8px;
-        color: var(--muted);
-        font-size: 14px;
+        max-height: 640px;
+        overflow: auto;
+        padding-right: 4px;
       }
 
-      .select-button {
+      .address-item {
         width: 100%;
-        min-height: 70px;
+        min-height: 68px;
+        display: grid;
+        gap: 5px;
         border: 1px solid var(--line);
-        border-radius: 6px;
+        border-radius: 8px;
         background: #0f1724;
         color: var(--text);
-        padding: 10px 12px;
-        font-size: 15px;
-        outline: none;
-        display: grid;
-        grid-template-columns: 1fr auto;
-        align-items: center;
-        gap: 10px;
+        padding: 12px;
         text-align: left;
         cursor: pointer;
       }
 
-      .select-button:focus {
-        border-color: var(--blue);
-        box-shadow: 0 0 0 3px rgba(92, 143, 250, 0.18);
+      .address-item:hover,
+      .address-item.active {
+        border-color: rgba(92, 143, 250, 0.8);
+        background: var(--panel-2);
       }
 
-      .select-button::after {
-        content: "";
-        width: 9px;
-        height: 9px;
-        border-right: 2px solid var(--muted);
-        border-bottom: 2px solid var(--muted);
-        transform: rotate(45deg) translateY(-2px);
-      }
-
-      .custom-select {
-        position: relative;
+      .address-item.active {
+        box-shadow: 0 0 0 3px rgba(92, 143, 250, 0.16);
       }
 
       .select-text,
-      .transaction-main,
       .history-main {
         min-width: 0;
         display: grid;
         gap: 4px;
       }
 
-      .select-button .select-text {
-        pointer-events: none;
-      }
-
       .select-name,
-      .transaction-title,
       .history-title {
         color: var(--text);
         font-weight: 700;
@@ -186,8 +177,6 @@
       }
 
       .select-address,
-      .transaction-sub,
-      .transaction-hash,
       .history-sub,
       .history-hash {
         color: var(--muted);
@@ -205,78 +194,11 @@
         word-break: normal;
       }
 
-      .select-menu {
-        position: absolute;
-        z-index: 10;
-        top: calc(100% + 8px);
-        left: 0;
-        right: 0;
-        display: none;
-        max-height: 320px;
-        overflow: auto;
-        background: #0f1724;
-        border: 1px solid var(--line);
-        border-radius: 8px;
-        box-shadow: 0 18px 50px rgba(0, 0, 0, 0.35);
-        padding: 6px;
-      }
-
-      .custom-select.open .select-menu {
-        display: grid;
-        gap: 4px;
-      }
-
-      .option {
-        width: 100%;
-        border: 0;
-        border-radius: 6px;
-        background: transparent;
-        color: var(--text);
-        padding: 10px;
-        cursor: pointer;
-        text-align: left;
-      }
-
-      .option:hover,
-      .option.active {
-        background: var(--panel-2);
-      }
-
-      .option .select-name {
-        margin-bottom: 4px;
-      }
-
       .empty-options {
         padding: 14px;
         color: var(--muted);
         font-size: 14px;
         line-height: 1.5;
-      }
-
-      .actions {
-        display: flex;
-        align-items: stretch;
-        flex-direction: column;
-        gap: 12px;
-        margin-top: 4px;
-      }
-
-      button.primary {
-        min-height: 44px;
-        border: 0;
-        border-radius: 6px;
-        background: var(--blue);
-        color: white;
-        padding: 0 22px;
-        font-size: 15px;
-        font-weight: 700;
-        cursor: pointer;
-        width: 100%;
-      }
-
-      button.primary:disabled {
-        cursor: wait;
-        opacity: 0.72;
       }
 
       .hint,
@@ -317,27 +239,6 @@
         margin-top: 6px;
       }
 
-      .result {
-        display: none;
-        margin-top: 18px;
-        border-radius: 8px;
-        padding: 18px;
-        background: var(--panel-2);
-        border: 1px solid var(--line);
-      }
-
-      .result.visible {
-        display: block;
-      }
-
-      .result.found {
-        border-color: rgba(71, 209, 140, 0.5);
-      }
-
-      .result.missing {
-        border-color: rgba(255, 107, 122, 0.45);
-      }
-
       .status {
         display: flex;
         align-items: center;
@@ -355,21 +256,11 @@
         background: var(--yellow);
       }
 
-      .found .dot {
-        background: var(--green);
-      }
-
-      .missing .dot {
-        background: var(--red);
-      }
-
-      .transactions,
       .history-list {
         display: grid;
         gap: 10px;
       }
 
-      .transaction,
       .history-card {
         display: grid;
         grid-template-columns: 1fr auto;
@@ -382,12 +273,10 @@
         text-decoration: none;
       }
 
-      .transaction:hover,
       .history-card:hover {
         border-color: rgba(92, 143, 250, 0.7);
       }
 
-      .transaction-amount,
       .history-amount {
         color: var(--green);
         font-size: 18px;
@@ -484,7 +373,6 @@
         }
 
         .topbar,
-        .actions,
         .history-head {
           align-items: stretch;
           flex-direction: column;
@@ -494,27 +382,19 @@
           flex-wrap: wrap;
         }
 
-        form,
         .guide-grid {
           grid-template-columns: 1fr;
         }
 
-        .actions {
-          grid-column: auto;
-        }
-
-        button.primary,
         .top-action {
           width: 100%;
           justify-content: center;
         }
 
-        .transaction,
         .history-card {
           grid-template-columns: 1fr;
         }
 
-        .transaction-amount,
         .history-amount {
           white-space: normal;
         }
@@ -539,40 +419,14 @@
       <div class="layout">
         <div class="left-stack">
           <section class="panel">
-            <form id="checker-form">
-              <div class="field">
-                <span>交易者A</span>
-                <div class="custom-select" data-role="sender">
-                  <button class="select-button" type="button" aria-haspopup="listbox" aria-expanded="false">
-                    <span class="select-text">
-                      <span class="select-name">请选择交易者A</span>
-                      <span class="select-address">从系统名单中选择</span>
-                    </span>
-                  </button>
-                  <div class="select-menu" role="listbox"></div>
-                </div>
+            <div class="list-panel-title">
+              <div>
+                <h2>名单列表</h2>
+                <div class="hint">点击任意名单成员，右侧自动筛选与此人相关的 NESO 互转记录。</div>
               </div>
-
-              <div class="field">
-                <span>交易者B</span>
-                <div class="custom-select" data-role="receiver">
-                  <button class="select-button" type="button" aria-haspopup="listbox" aria-expanded="false">
-                    <span class="select-text">
-                      <span class="select-name">请选择交易者B</span>
-                      <span class="select-address">从系统名单中选择</span>
-                    </span>
-                  </button>
-                  <div class="select-menu" role="listbox"></div>
-                </div>
-              </div>
-
-              <div class="actions">
-                <span class="hint">选择交易者A和交易者B后，查询这两个地址之间最近 3 笔 NESO 互转交易。</span>
-                <button id="submit" class="primary" type="submit">查询最近交易</button>
-              </div>
-            </form>
-
-            <div id="result" class="result" aria-live="polite"></div>
+              <div id="address-count" class="address-count">读取中</div>
+            </div>
+            <div id="address-list" class="address-list" aria-live="polite"></div>
           </section>
 
           <section class="guide">
@@ -580,9 +434,9 @@
               <div class="guide-block">
                 <h3>使用方法</h3>
                 <ol class="guide-list">
-                  <li>先在左侧选择交易者A和交易者B。</li>
-                  <li>点击查询最近交易，查看这两个地址之间最近 3 笔 NESO 互转记录。</li>
-                  <li>右侧转账历史会自动刷新，显示系统名单内地址之间的互转。</li>
+                  <li>先在左侧名单中点击一个人。</li>
+                  <li>右侧会自动显示此人与名单内其他人的 NESO 互转记录。</li>
+                  <li>右侧转账历史会自动刷新，保持当前筛选条件。</li>
                   <li>点击任意交易记录，可以打开 Explorer 查看详情。</li>
                 </ol>
               </div>
@@ -603,7 +457,7 @@
           <div class="history-head">
             <div>
               <h2>实时转账历史</h2>
-              <div class="history-meta">显示最近 7 天内，系统名单地址之间的互转记录。</div>
+              <div id="history-meta" class="history-meta">请选择左侧名单成员。</div>
             </div>
             <div id="history-state" class="history-state"><span class="dot"></span>准备刷新</div>
           </div>
@@ -619,24 +473,20 @@
     </div>
 
     <script>
-      const form = document.querySelector('#checker-form');
-      const button = document.querySelector('#submit');
-      const result = document.querySelector('#result');
+      const addressList = document.querySelector('#address-list');
+      const addressCount = document.querySelector('#address-count');
+      const historyMeta = document.querySelector('#history-meta');
       const historyList = document.querySelector('#history-list');
       const historyState = document.querySelector('#history-state');
       const updateToast = document.querySelector('#update-toast');
       const reloadPageButton = document.querySelector('#reload-page');
-      const selects = {
-        sender: document.querySelector('[data-role="sender"]'),
-        receiver: document.querySelector('[data-role="receiver"]'),
-      };
 
       const state = {
         addresses: [],
-        sender: null,
-        receiver: null,
+        selectedAddress: null,
         historyTimer: null,
         historyLoading: false,
+        pendingHistoryLoad: false,
         appVersion: null,
         versionTimer: null,
         updateVisible: false,
@@ -669,73 +519,52 @@
         const addresses = checked?.addresses || 0;
         const transactions = checked?.transactions || 0;
         const days = checked?.days || 7;
-        return `已检查系统名单内 ${addresses} 个地址的 ${days} 天内交易，共扫描 ${transactions} 笔。`;
+        const selectedName = checked?.selectedNickname || state.selectedAddress?.nickname || '';
+        const target = selectedName ? `${selectedName} 与名单内其他人` : `系统名单内 ${addresses} 个地址`;
+
+        return `已检查 ${target} 的 ${days} 天内交易，共扫描 ${transactions} 笔。`;
       };
 
-      const renderSelected = (role) => {
-        const root = selects[role];
-        const buttonText = root.querySelector('.select-text');
-        const item = state[role];
-
-        if (!item) {
-          buttonText.innerHTML = `
-            <span class="select-name">${role === 'sender' ? '请选择交易者A' : '请选择交易者B'}</span>
-            <span class="select-address">从系统名单中选择</span>
-          `;
+      const updateHistoryMeta = () => {
+        if (!state.selectedAddress) {
+          historyMeta.textContent = '请选择左侧名单成员。';
           return;
         }
 
-        buttonText.innerHTML = `
-          <span class="select-name">${escapeHtml(item.nickname)}</span>
-          <span class="select-address">${escapeHtml(item.address)}</span>
-        `;
+        historyMeta.textContent = `显示最近 7 天内，${state.selectedAddress.nickname} 与名单内其他人的 NESO 互转记录。`;
       };
 
-      const closeMenus = (except) => {
-        Object.values(selects).forEach((root) => {
-          if (root === except) return;
-          root.classList.remove('open');
-          root.querySelector('.select-button').setAttribute('aria-expanded', 'false');
+      const renderAddressList = () => {
+        addressCount.textContent = state.addresses.length ? `${state.addresses.length} 人` : '无名单';
+
+        if (!state.addresses.length) {
+          addressList.innerHTML = '<div class="empty-options">暂无名单地址，请先更新 Excel 表格。</div>';
+          return;
+        }
+
+        addressList.innerHTML = state.addresses.map((item) => {
+          const active = state.selectedAddress?.id === item.id ? ' active' : '';
+          return `
+            <button class="address-item${active}" type="button" data-id="${escapeHtml(item.id)}">
+              <span class="select-name">${escapeHtml(item.nickname)}</span>
+              <span class="select-address">${escapeHtml(item.address)}</span>
+            </button>
+          `;
+        }).join('');
+
+        addressList.querySelectorAll('.address-item').forEach((item) => {
+          item.addEventListener('click', () => selectAddress(item.dataset.id));
         });
       };
 
-      const selectAddress = (role, id) => {
-        state[role] = state.addresses.find((item) => item.id === id) || null;
-        renderSelected(role);
-        closeMenus();
-        result.className = 'result';
-        result.innerHTML = '';
-      };
+      const selectAddress = (id) => {
+        const selected = state.addresses.find((item) => item.id === id) || null;
+        if (!selected || selected.id === state.selectedAddress?.id) return;
 
-      const renderOptions = () => {
-        Object.entries(selects).forEach(([role, root]) => {
-          const menu = root.querySelector('.select-menu');
-
-          if (!state.addresses.length) {
-            menu.innerHTML = '<div class="empty-options">暂无可选地址，请联系管理员更新名单。</div>';
-            renderSelected(role);
-            return;
-          }
-
-          menu.innerHTML = state.addresses.map((item) => {
-            const active = state[role]?.id === item.id ? ' active' : '';
-            return `
-              <button class="option${active}" type="button" role="option" data-id="${escapeHtml(item.id)}">
-                <div class="select-name">${escapeHtml(item.nickname)}</div>
-                <div class="select-address">${escapeHtml(item.address)}</div>
-              </button>
-            `;
-          }).join('');
-
-          menu.querySelectorAll('.option').forEach((option) => {
-            option.addEventListener('click', (event) => {
-              event.stopPropagation();
-              selectAddress(role, option.dataset.id);
-            });
-          });
-
-          renderSelected(role);
-        });
+        state.selectedAddress = selected;
+        renderAddressList();
+        updateHistoryMeta();
+        loadHistory(true);
       };
 
       const loadAddressBook = async () => {
@@ -743,70 +572,22 @@
           const response = await fetch('/api/address-book');
           const data = await response.json();
           state.addresses = Array.isArray(data.addresses) ? data.addresses : [];
-          state.sender = state.addresses[0] || null;
-          state.receiver = state.addresses[1] || state.addresses[0] || null;
-          renderOptions();
+          state.selectedAddress = state.addresses[0] || null;
+          renderAddressList();
+          updateHistoryMeta();
+          await loadHistory(true);
         } catch (error) {
-          result.className = 'result visible missing';
-          result.innerHTML = '<div class="status"><span class="dot"></span>地址列表读取失败，请刷新页面重试。</div>';
+          addressCount.textContent = '读取失败';
+          addressList.innerHTML = '<div class="empty-options">地址列表读取失败，请刷新页面重试。</div>';
+          historyList.innerHTML = '<div class="empty-options">请先读取左侧名单。</div>';
         }
-      };
-
-      Object.entries(selects).forEach(([role, root]) => {
-        const selectButton = root.querySelector('.select-button');
-        root.addEventListener('click', (event) => {
-          if (event.target.closest('.select-menu')) return;
-
-          const willOpen = !root.classList.contains('open');
-          closeMenus(root);
-          root.classList.toggle('open', willOpen);
-          selectButton.setAttribute('aria-expanded', String(willOpen));
-          renderOptions();
-        });
-      });
-
-      document.addEventListener('click', (event) => {
-        if (!event.target.closest('.custom-select')) closeMenus();
-      });
-
-      document.addEventListener('keydown', (event) => {
-        if (event.key === 'Escape') closeMenus();
-      });
-
-      const renderTransactions = (data) => {
-        result.className = `result visible ${data.found ? 'found' : 'missing'}`;
-
-        if (!data.found) {
-          result.innerHTML = `
-            <div class="status"><span class="dot"></span>${escapeHtml(data.message || '还没收到钱')}</div>
-            <div class="summary">已检查 ${escapeHtml(data.checked?.transactions || 0)} 笔交易。</div>
-          `;
-          return;
-        }
-
-        const items = data.transactions.map((trx, index) => `
-          <a class="transaction" href="${escapeHtml(trx.explorerUrl)}" target="_blank" rel="noreferrer">
-            <span class="transaction-main">
-              <span class="transaction-title">第 ${index + 1} 笔 · ${escapeHtml(trx.age || '时间未知')}</span>
-              <span class="transaction-sub">区块 ${escapeHtml(trx.blockNumber || '-')}</span>
-              <span class="transaction-hash">${escapeHtml(trx.hash)}</span>
-            </span>
-            <span class="transaction-amount">${escapeHtml(formatAmount(trx.amount))} NESO</span>
-          </a>
-        `).join('');
-
-        result.innerHTML = `
-          <div class="status"><span class="dot"></span>${escapeHtml(data.message || '已找到最近交易')}</div>
-          <div class="summary">显示最近 ${data.transactions.length} 笔匹配交易，已检查 ${escapeHtml(data.checked?.transactions || 0)} 笔。</div>
-          <div class="transactions">${items}</div>
-        `;
       };
 
       const renderHistory = (data) => {
         if (!data.transactions?.length) {
           historyList.innerHTML = `
             <div class="empty-options">
-              最近 ${escapeHtml(data.checked?.days || 7)} 天内暂无系统名单内互转记录。<br>
+              最近 ${escapeHtml(data.checked?.days || 7)} 天内暂无相关 NESO 互转记录。<br>
               ${escapeHtml(renderHistoryCheckSummary(data.checked))}
             </div>
           `;
@@ -827,14 +608,33 @@
         `;
       };
 
-      const loadHistory = async () => {
-        if (state.historyLoading) return;
+      const loadHistory = async (force = false) => {
+        if (!state.selectedAddress) {
+          historyList.innerHTML = '<div class="empty-options">请选择左侧名单成员。</div>';
+          setHistoryState('等待选择');
+          return;
+        }
+
+        if (state.historyLoading) {
+          state.pendingHistoryLoad = force || state.pendingHistoryLoad;
+          return;
+        }
+
         state.historyLoading = true;
         setHistoryState('刷新中...');
 
         try {
-          const response = await fetch('/api/history');
+          const requestedAddress = state.selectedAddress.address;
+          const params = new URLSearchParams({
+            address: requestedAddress,
+          });
+          const response = await fetch(`/api/history?${params.toString()}`);
           const data = await response.json();
+
+          if (requestedAddress !== state.selectedAddress?.address) {
+            return;
+          }
+
           renderHistory(data);
           setHistoryState(`已更新 ${new Date().toLocaleTimeString()}`);
         } catch (error) {
@@ -842,6 +642,10 @@
           setHistoryState('刷新失败');
         } finally {
           state.historyLoading = false;
+          if (state.pendingHistoryLoad) {
+            state.pendingHistoryLoad = false;
+            loadHistory(true);
+          }
         }
       };
 
@@ -877,43 +681,7 @@
         window.location.reload();
       });
 
-      form.addEventListener('submit', async (event) => {
-        event.preventDefault();
-
-        if (!state.sender || !state.receiver) {
-          result.className = 'result visible missing';
-          result.innerHTML = '<div class="status"><span class="dot"></span>请先选择交易者A和交易者B。</div>';
-          return;
-        }
-
-        button.disabled = true;
-        button.textContent = '查询中...';
-        result.className = 'result visible';
-        result.innerHTML = '<div class="status"><span class="dot"></span>正在查询最近交易</div>';
-
-        try {
-          const response = await fetch('/api/recent-transactions', {
-            method: 'POST',
-            headers: { 'content-type': 'application/json' },
-            body: JSON.stringify({
-              sender: state.sender.address,
-              receiver: state.receiver.address,
-            }),
-          });
-
-          const data = await response.json();
-          renderTransactions(data);
-        } catch (error) {
-          result.className = 'result visible missing';
-          result.innerHTML = '<div class="status"><span class="dot"></span>查询失败，请稍后再试。</div>';
-        } finally {
-          button.disabled = false;
-          button.textContent = '查询最近交易';
-        }
-      });
-
       loadAddressBook();
-      loadHistory();
       checkAppVersion();
       state.historyTimer = window.setInterval(loadHistory, 15000);
       state.versionTimer = window.setInterval(checkAppVersion, 30000);

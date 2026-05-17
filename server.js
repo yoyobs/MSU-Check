@@ -37,6 +37,7 @@ let historyCache = {
   expiresAt: 0,
 };
 
+const filteredHistoryCache = new Map();
 const transactionDetailCache = new Map();
 
 const json = (res, status, payload) => {
@@ -300,7 +301,7 @@ const listTokenTransfers = async ({ trx, lookup, matchTransfer }) => {
     .map((transfer) => withBookNames(mapTokenTransfer({ trx: detail, transfer }), lookup));
 };
 
-const scanAddressHistory = async ({ address, sinceMs, addressSet, lookup }) => {
+const scanAddressHistory = async ({ address, sinceMs, addressSet, lookup, matchTransfer }) => {
   const candidates = new Map();
   const checked = {
     pages: 0,
@@ -336,7 +337,7 @@ const scanAddressHistory = async ({ address, sinceMs, addressSet, lookup }) => {
   const details = await Promise.all(Array.from(candidates.values()).map((trx) => listTokenTransfers({
     trx,
     lookup,
-    matchTransfer: ({ from, to }) => addressSet.has(from) && addressSet.has(to),
+    matchTransfer: matchTransfer || (({ from, to }) => addressSet.has(from) && addressSet.has(to)),
   })));
 
   checked.details = candidates.size;
@@ -460,21 +461,47 @@ const listRecentPayments = async ({ sender, receiver }) => {
   };
 };
 
-const listAddressBookHistory = async () => {
-  if (historyCache.value && Date.now() < historyCache.expiresAt) {
+const listAddressBookHistory = async ({ selectedAddress } = {}) => {
+  const normalizedSelectedAddress = normalizeAddress(selectedAddress);
+  const cacheKey = normalizedSelectedAddress || 'all';
+  const cached = normalizedSelectedAddress ? filteredHistoryCache.get(cacheKey) : historyCache;
+
+  if (cached?.value && Date.now() < cached.expiresAt) {
+    return cached.value;
+  }
+
+  if (!normalizedSelectedAddress && historyCache.value && Date.now() < historyCache.expiresAt) {
     return historyCache.value;
   }
 
   const { addresses } = await readAddressBook();
   const lookup = buildAddressLookup(addresses);
   const addressSet = new Set(lookup.keys());
-  const uniqueAddresses = Array.from(addressSet);
+  const selectedBookEntry = normalizedSelectedAddress ? lookup.get(normalizedSelectedAddress) : null;
+  const uniqueAddresses = normalizedSelectedAddress ? [normalizedSelectedAddress] : Array.from(addressSet);
   const sinceMs = Date.now() - HISTORY_WINDOW_DAYS * 24 * 60 * 60 * 1000;
+
+  if (normalizedSelectedAddress && !selectedBookEntry) {
+    return {
+      transactions: [],
+      checked: {
+        selectedAddress: normalizedSelectedAddress,
+        selectedNickname: '',
+        addresses: addressSet.size,
+        pages: 0,
+        transactions: 0,
+        days: HISTORY_WINDOW_DAYS,
+      },
+      message: '选中的地址不在名单里。',
+    };
+  }
 
   if (addressSet.size < 2) {
     return {
       transactions: [],
       checked: {
+        selectedAddress: normalizedSelectedAddress,
+        selectedNickname: selectedBookEntry?.nickname || '',
         addresses: addressSet.size,
         pages: 0,
         transactions: 0,
@@ -484,9 +511,12 @@ const listAddressBookHistory = async () => {
   }
 
   const checked = {
+    selectedAddress: normalizedSelectedAddress,
+    selectedNickname: selectedBookEntry?.nickname || '',
     addresses: addressSet.size,
     pages: 0,
     transactions: 0,
+    details: 0,
     days: HISTORY_WINDOW_DAYS,
   };
   const byHash = new Map();
@@ -498,11 +528,15 @@ const listAddressBookHistory = async () => {
       sinceMs,
       addressSet,
       lookup,
+      matchTransfer: normalizedSelectedAddress
+        ? ({ from, to }) => addressSet.has(from) && addressSet.has(to) && (from === normalizedSelectedAddress || to === normalizedSelectedAddress)
+        : undefined,
     })));
 
     for (const result of results) {
       checked.pages += result.checked.pages;
       checked.transactions += result.checked.transactions;
+      checked.details += result.checked.details;
 
       for (const transaction of result.transactions) {
         byHash.set(transaction.hash, transaction);
@@ -519,10 +553,16 @@ const listAddressBookHistory = async () => {
     checked,
   };
 
-  historyCache = {
+  const nextCache = {
     value: result,
     expiresAt: Date.now() + HISTORY_CACHE_MS,
   };
+
+  if (normalizedSelectedAddress) {
+    filteredHistoryCache.set(cacheKey, nextCache);
+  } else {
+    historyCache = nextCache;
+  }
 
   return result;
 };
@@ -605,9 +645,12 @@ const handleGetAddressBook = async (res) => {
   }
 };
 
-const handleHistory = async (res) => {
+const handleHistory = async (req, res) => {
   try {
-    const result = await listAddressBookHistory();
+    const url = new URL(req.url, 'http://localhost');
+    const result = await listAddressBookHistory({
+      selectedAddress: url.searchParams.get('address'),
+    });
     json(res, 200, result);
   } catch (error) {
     json(res, 500, {
@@ -703,7 +746,7 @@ const server = createServer(async (req, res) => {
   }
 
   if (req.method === 'GET' && url.pathname === '/api/history') {
-    await handleHistory(res);
+    await handleHistory(req, res);
     return;
   }
 
