@@ -1,8 +1,9 @@
 import { createServer } from 'node:http';
-import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { readFile } from 'node:fs/promises';
 import { extname, isAbsolute, join, normalize, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { randomBytes, timingSafeEqual, webcrypto } from 'node:crypto';
+import { webcrypto } from 'node:crypto';
+import XLSX from 'xlsx';
 
 const API_BASE = 'https://api-gateway.xangle.io';
 const EXPLORER_ORIGIN = 'https://msu-explorer.xangle.io';
@@ -11,25 +12,15 @@ const PORT = Number(process.env.PORT || 3000);
 const MAX_PAGES = Number(process.env.MAX_PAGES || 20);
 const PAGE_SIZE = Number(process.env.PAGE_SIZE || 25);
 const BODY_LIMIT = 1024 * 1024;
-const IS_VERCEL = Boolean(process.env.VERCEL);
-const ADDRESS_BOOK_KEY = process.env.ADDRESS_BOOK_KEY || 'msu-check:address-book';
-const KV_REST_API_URL = process.env.KV_REST_API_URL || process.env.UPSTASH_REDIS_REST_URL || '';
-const KV_REST_API_TOKEN = process.env.KV_REST_API_TOKEN || process.env.UPSTASH_REDIS_REST_TOKEN || '';
 
 const rootDir = fileURLToPath(new URL('.', import.meta.url));
 const publicDir = join(rootDir, 'public');
-const dataDir = join(rootDir, 'data');
-const addressBookPath = join(dataDir, 'address-book.json');
-const adminPasswordPath = join(dataDir, 'admin-password.txt');
+const addressBookPath = join(rootDir, 'data', 'address-book.xlsx');
 
 let secretCache = {
   key: '',
   expiresAt: 0,
 };
-
-let adminPasswordCache = '';
-
-const hasKvStore = () => Boolean(KV_REST_API_URL && KV_REST_API_TOKEN);
 
 const json = (res, status, payload) => {
   const body = JSON.stringify(payload);
@@ -63,8 +54,7 @@ const readJsonBody = async (req) => {
   }
 
   if (!chunks.length) return {};
-  const raw = Buffer.concat(chunks).toString('utf8');
-  return JSON.parse(raw);
+  return JSON.parse(Buffer.concat(chunks).toString('utf8'));
 };
 
 const randomHash = () => {
@@ -261,160 +251,53 @@ const findPayment = async ({ sender, receiver, amount }) => {
   };
 };
 
-const ensureDataDir = async () => {
-  await mkdir(dataDir, { recursive: true });
-};
-
-const kvCommand = async (command) => {
-  const response = await fetch(KV_REST_API_URL, {
-    method: 'POST',
-    headers: {
-      authorization: `Bearer ${KV_REST_API_TOKEN}`,
-      'content-type': 'application/json',
-    },
-    body: JSON.stringify(command),
-  });
-
-  const raw = await response.text();
-  if (!response.ok) {
-    throw new Error(`KV request failed: ${response.status} ${raw}`);
-  }
-
-  return JSON.parse(raw);
-};
-
-const createId = () => randomBytes(8).toString('hex');
-
-const sanitizeAddressEntry = (entry) => {
-  const id = String(entry?.id || createId()).trim();
+const sanitizeAddressEntry = (entry, rowNumber) => {
   const nickname = String(entry?.nickname || '').trim();
   const address = String(entry?.address || '').trim();
 
   if (!nickname && !address) return null;
 
-  if (!nickname) {
-    const error = new Error('昵称不能为空。');
-    error.statusCode = 400;
-    throw error;
-  }
-
-  if (!/^0x[a-fA-F0-9]{40}$/.test(address)) {
-    const error = new Error(`地址格式不正确：${address || '空地址'}`);
-    error.statusCode = 400;
-    throw error;
+  if (!nickname || !/^0x[a-fA-F0-9]{40}$/.test(address)) {
+    return {
+      invalid: true,
+      rowNumber,
+      nickname,
+      address,
+    };
   }
 
   return {
-    id: id || createId(),
+    id: `${rowNumber}-${address.toLowerCase()}`,
     nickname: nickname.slice(0, 80),
     address,
   };
 };
 
-const sanitizeAddressBook = (addresses) => {
-  if (!Array.isArray(addresses)) {
-    const error = new Error('地址列表格式不正确。');
-    error.statusCode = 400;
-    throw error;
-  }
-
-  const used = new Set();
-  return addresses
-    .map(sanitizeAddressEntry)
-    .filter(Boolean)
-    .map((item) => {
-      let id = item.id;
-      while (used.has(id)) id = createId();
-      used.add(id);
-      return { ...item, id };
-    });
-};
-
 const readAddressBook = async () => {
-  if (hasKvStore()) {
-    const data = await kvCommand(['GET', ADDRESS_BOOK_KEY]);
+  const file = await readFile(addressBookPath);
+  const workbook = XLSX.read(file, { type: 'buffer' });
+  const sheetName = workbook.Sheets['地址名单'] ? '地址名单' : workbook.SheetNames[0];
+  const sheet = workbook.Sheets[sheetName];
 
-    if (data.result) {
-      return {
-        addresses: sanitizeAddressBook(JSON.parse(data.result).addresses || []),
-      };
-    }
+  if (!sheet) {
+    return { addresses: [], invalidRows: [] };
   }
 
-  try {
-    const raw = await readFile(addressBookPath, 'utf8');
-    const data = JSON.parse(raw);
-    return {
-      addresses: sanitizeAddressBook(data.addresses || []),
-    };
-  } catch (error) {
-    if (error.code !== 'ENOENT') throw error;
+  const rows = XLSX.utils.sheet_to_json(sheet, {
+    header: 1,
+    raw: false,
+    defval: '',
+  });
 
-    const emptyBook = { addresses: [] };
-    if (IS_VERCEL) return emptyBook;
+  const parsed = rows.slice(1).map((row, index) => sanitizeAddressEntry({
+    nickname: row[0],
+    address: row[1],
+  }, index + 2));
 
-    await writeAddressBook(emptyBook.addresses);
-    return emptyBook;
-  }
-};
-
-const writeAddressBook = async (addresses) => {
-  const book = {
-    addresses: sanitizeAddressBook(addresses),
-    updatedAt: new Date().toISOString(),
+  return {
+    addresses: parsed.filter((item) => item && !item.invalid),
+    invalidRows: parsed.filter((item) => item?.invalid),
   };
-
-  if (hasKvStore()) {
-    await kvCommand(['SET', ADDRESS_BOOK_KEY, JSON.stringify(book)]);
-    return book;
-  }
-
-  if (IS_VERCEL) {
-    const error = new Error('Vercel 线上环境不能直接写入项目文件，请先配置 Upstash Redis / Vercel KV 环境变量。');
-    error.statusCode = 501;
-    throw error;
-  }
-
-  await ensureDataDir();
-  await writeFile(addressBookPath, `${JSON.stringify(book, null, 2)}\n`, 'utf8');
-  return book;
-};
-
-const getAdminPassword = async () => {
-  if (process.env.ADMIN_PASSWORD) return process.env.ADMIN_PASSWORD;
-  if (adminPasswordCache) return adminPasswordCache;
-
-  if (IS_VERCEL) return '';
-
-  await ensureDataDir();
-
-  try {
-    const password = (await readFile(adminPasswordPath, 'utf8')).trim();
-    if (password) {
-      adminPasswordCache = password;
-      return password;
-    }
-  } catch (error) {
-    if (error.code !== 'ENOENT') throw error;
-  }
-
-  adminPasswordCache = randomBytes(18).toString('base64url');
-  await writeFile(adminPasswordPath, `${adminPasswordCache}\n`, 'utf8');
-  return adminPasswordCache;
-};
-
-const safeEqual = (a, b) => {
-  const left = Buffer.from(String(a || ''));
-  const right = Buffer.from(String(b || ''));
-  return left.length === right.length && timingSafeEqual(left, right);
-};
-
-const requireAdmin = async (req) => {
-  const expected = await getAdminPassword();
-  if (!expected) return false;
-
-  const provided = req.headers['x-admin-password'];
-  return safeEqual(provided, expected);
 };
 
 const handleSearch = async (req, res) => {
@@ -438,34 +321,30 @@ const handleGetAddressBook = async (res) => {
   } catch (error) {
     json(res, 500, {
       addresses: [],
-      message: '读取地址列表失败。',
+      invalidRows: [],
+      message: '读取地址名单 Excel 失败。',
       detail: error.message,
     });
   }
 };
 
-const handleSaveAddressBook = async (req, res) => {
+const serveAddressBookFile = async (req, res) => {
   try {
-    if (!(await requireAdmin(req))) {
-      json(res, 401, {
-        message: IS_VERCEL && !process.env.ADMIN_PASSWORD
-          ? '请先在 Vercel 环境变量设置 ADMIN_PASSWORD。'
-          : '管理密码不正确。',
-      });
+    const data = await readFile(addressBookPath);
+    res.writeHead(200, {
+      'content-type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      'content-disposition': 'attachment; filename="address-book.xlsx"',
+      'cache-control': 'no-store',
+    });
+
+    if (req.method === 'HEAD') {
+      res.end();
       return;
     }
 
-    const body = await readJsonBody(req);
-    const book = await writeAddressBook(body.addresses || []);
-    json(res, 200, {
-      ...book,
-      message: '地址列表已保存。',
-    });
-  } catch (error) {
-    json(res, error.statusCode || 500, {
-      message: error.statusCode ? error.message : '保存地址列表失败。',
-      detail: error.message,
-    });
+    res.end(data);
+  } catch {
+    text(res, 404, 'Address book not found');
   }
 };
 
@@ -519,8 +398,8 @@ const server = createServer(async (req, res) => {
     return;
   }
 
-  if (req.method === 'PUT' && url.pathname === '/api/admin/address-book') {
-    await handleSaveAddressBook(req, res);
+  if ((req.method === 'GET' || req.method === 'HEAD') && url.pathname === '/address-book.xlsx') {
+    await serveAddressBookFile(req, res);
     return;
   }
 
@@ -532,16 +411,7 @@ const server = createServer(async (req, res) => {
   text(res, 405, 'Method not allowed');
 });
 
-server.listen(PORT, async () => {
-  await getAdminPassword();
+server.listen(PORT, () => {
   console.log(`MSU payment checker running at http://localhost:${PORT}`);
-  console.log(`Admin page: http://localhost:${PORT}/admin.html`);
-
-  if (process.env.ADMIN_PASSWORD) {
-    console.log('Admin password: configured by ADMIN_PASSWORD environment variable');
-  } else if (IS_VERCEL) {
-    console.log('Admin password: set ADMIN_PASSWORD in Vercel environment variables');
-  } else {
-    console.log(`Admin password file: ${adminPasswordPath}`);
-  }
+  console.log(`Address book Excel: ${addressBookPath}`);
 });
