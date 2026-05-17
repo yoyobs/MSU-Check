@@ -11,7 +11,7 @@ const CHAIN = 'NEXON';
 const PORT = Number(process.env.PORT || 3000);
 const MAX_PAGES = Number(process.env.MAX_PAGES || 20);
 const PAGE_SIZE = Number(process.env.PAGE_SIZE || 25);
-const RECENT_LIMIT = 2;
+const RECENT_LIMIT = 3;
 const HISTORY_LIMIT = Number(process.env.HISTORY_LIMIT || 200);
 const HISTORY_WINDOW_DAYS = Number(process.env.HISTORY_WINDOW_DAYS || 7);
 const HISTORY_CACHE_MS = Number(process.env.HISTORY_CACHE_MS || 60 * 1000);
@@ -371,22 +371,80 @@ const listRecentPayments = async ({ sender, receiver }) => {
   const addressSet = new Set([senderAddress, receiverAddress]);
   const { addresses } = await readAddressBook();
   const lookup = buildAddressLookup(addresses);
+  const scanState = Array.from(addressSet).map((address) => ({
+    address,
+    page: 1,
+    done: false,
+    lastOldestMs: Number.POSITIVE_INFINITY,
+  }));
   const byHash = new Map();
 
-  for (const address of addressSet) {
-    const result = await scanAddressHistory({
-      address,
-      sinceMs,
-      addressSet,
+  while (scanState.some((item) => !item.done)) {
+    const activeScans = scanState.filter((item) => !item.done);
+    const pageResults = await Promise.all(activeScans.map(async (scan) => {
+      const data = await explorerPost('/api/address/transaction/list', {
+        address: scan.address,
+        page: scan.page,
+        size: PAGE_SIZE,
+      });
+
+      return {
+        scan,
+        list: Array.isArray(data.TRXLIST) ? data.TRXLIST : [],
+      };
+    }));
+
+    const candidates = new Map();
+
+    for (const { scan, list } of pageResults) {
+      checked.pages += 1;
+      checked.transactions += list.length;
+
+      let hasRecentTransaction = false;
+      let oldestMs = Number.POSITIVE_INFINITY;
+
+      for (const trx of list) {
+        const timestampMs = timestampToMs(trx.UT);
+        if (!timestampMs) continue;
+
+        oldestMs = Math.min(oldestMs, timestampMs);
+        if (timestampMs >= sinceMs) {
+          hasRecentTransaction = true;
+          candidates.set(normalizeAddress(trx.TRXHA), trx);
+        }
+      }
+
+      scan.lastOldestMs = oldestMs;
+      scan.page += 1;
+
+      if (list.length < PAGE_SIZE || !hasRecentTransaction) {
+        scan.done = true;
+      }
+    }
+
+    const transferGroups = await Promise.all(Array.from(candidates.values()).map((trx) => listTokenTransfers({
+      trx,
       lookup,
-    });
+      matchTransfer: ({ from, to }) => addressSet.has(from) && addressSet.has(to),
+    })));
+    checked.details += candidates.size;
 
-    checked.pages += result.checked.pages;
-    checked.transactions += result.checked.transactions;
-    checked.details += result.checked.details;
+    for (const transfers of transferGroups) {
+      for (const transaction of transfers) {
+        byHash.set(transaction.hash, transaction);
+      }
+    }
 
-    for (const transaction of result.transactions) {
-      byHash.set(transaction.hash, transaction);
+    const currentMatches = Array.from(byHash.values())
+      .sort((a, b) => timestampToMs(b.timestamp) - timestampToMs(a.timestamp));
+
+    if (currentMatches.length >= RECENT_LIMIT) {
+      const cutoffMs = timestampToMs(currentMatches[RECENT_LIMIT - 1].timestamp);
+      const newerPagesExhausted = scanState.every((scan) => scan.done || scan.lastOldestMs <= cutoffMs);
+
+      if (newerPagesExhausted) {
+        break;
+      }
     }
   }
 
