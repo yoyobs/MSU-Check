@@ -32,7 +32,7 @@
       }
 
       main {
-        width: min(960px, calc(100% - 32px));
+        width: min(1080px, calc(100% - 32px));
         margin: 0 auto;
         padding: 48px 0;
       }
@@ -83,14 +83,9 @@
         font-size: 14px;
       }
 
-      .amount {
-        grid-column: span 1;
-      }
-
-      input,
       .select-button {
         width: 100%;
-        min-height: 44px;
+        min-height: 70px;
         border: 1px solid var(--line);
         border-radius: 6px;
         background: #0f1724;
@@ -98,26 +93,17 @@
         padding: 10px 12px;
         font-size: 15px;
         outline: none;
-      }
-
-      input:focus,
-      .select-button:focus {
-        border-color: var(--blue);
-        box-shadow: 0 0 0 3px rgba(92, 143, 250, 0.18);
-      }
-
-      .custom-select {
-        position: relative;
-      }
-
-      .select-button {
         display: grid;
         grid-template-columns: 1fr auto;
         align-items: center;
         gap: 10px;
-        min-height: 70px;
         text-align: left;
         cursor: pointer;
+      }
+
+      .select-button:focus {
+        border-color: var(--blue);
+        box-shadow: 0 0 0 3px rgba(92, 143, 250, 0.18);
       }
 
       .select-button::after {
@@ -129,19 +115,27 @@
         transform: rotate(45deg) translateY(-2px);
       }
 
-      .select-text {
+      .custom-select {
+        position: relative;
+      }
+
+      .select-text,
+      .transaction-main {
         min-width: 0;
         display: grid;
         gap: 4px;
       }
 
-      .select-name {
+      .select-name,
+      .transaction-title {
         color: var(--text);
         font-weight: 700;
         line-height: 1.3;
       }
 
-      .select-address {
+      .select-address,
+      .transaction-sub,
+      .transaction-hash {
         color: var(--muted);
         font-family: Consolas, "SFMono-Regular", monospace;
         font-size: 12px;
@@ -275,28 +269,43 @@
         background: var(--red);
       }
 
-      .details {
+      .transactions {
         display: grid;
-        grid-template-columns: 120px 1fr;
-        gap: 10px 14px;
+        gap: 10px;
+      }
+
+      .transaction {
+        display: grid;
+        grid-template-columns: 1fr auto;
+        gap: 14px;
+        align-items: center;
+        padding: 14px;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: #0f1724;
+        text-decoration: none;
+      }
+
+      .transaction:hover {
+        border-color: rgba(92, 143, 250, 0.7);
+      }
+
+      .transaction-amount {
+        color: var(--green);
+        font-size: 18px;
+        font-weight: 700;
+        white-space: nowrap;
+      }
+
+      .summary {
         color: var(--muted);
-        font-size: 14px;
-      }
-
-      .details strong,
-      .details a {
-        min-width: 0;
-        color: var(--text);
-        word-break: break-all;
-      }
-
-      .details a {
-        color: var(--blue);
+        font-size: 13px;
+        margin-bottom: 14px;
       }
 
       @media (max-width: 720px) {
         main {
-          width: min(100% - 24px, 960px);
+          width: min(100% - 24px, 1080px);
           padding: 28px 0;
         }
 
@@ -310,18 +319,24 @@
           flex-wrap: wrap;
         }
 
-        form,
-        .details {
+        form {
           grid-template-columns: 1fr;
         }
 
-        .amount,
         .actions {
           grid-column: auto;
         }
 
         button.primary {
           width: 100%;
+        }
+
+        .transaction {
+          grid-template-columns: 1fr;
+        }
+
+        .transaction-amount {
+          white-space: normal;
         }
       }
     </style>
@@ -344,7 +359,7 @@
               <button class="select-button" type="button" aria-haspopup="listbox" aria-expanded="false">
                 <span class="select-text">
                   <span class="select-name">请选择发送者</span>
-                  <span class="select-address">先在后台添加昵称和地址</span>
+                  <span class="select-address">从地址名单 Excel 读取</span>
                 </span>
               </button>
               <div class="select-menu" role="listbox"></div>
@@ -357,21 +372,16 @@
               <button class="select-button" type="button" aria-haspopup="listbox" aria-expanded="false">
                 <span class="select-text">
                   <span class="select-name">请选择接收者</span>
-                  <span class="select-address">先在后台添加昵称和地址</span>
+                  <span class="select-address">从地址名单 Excel 读取</span>
                 </span>
               </button>
               <div class="select-menu" role="listbox"></div>
             </div>
           </div>
 
-          <label class="field amount">
-            金额
-            <input id="amount" name="amount" inputmode="decimal" autocomplete="off" placeholder="例如 10 或 10.5" required>
-          </label>
-
           <div class="actions">
-            <span class="hint">地址名单由 data/address-book.xlsx 维护；查询会匹配发送者、接收者和 NXPC 金额。</span>
-            <button id="submit" class="primary" type="submit">查询</button>
+            <span class="hint">选择发送者和接收者后，查询会显示最近 10 笔匹配交易。</span>
+            <button id="submit" class="primary" type="submit">查询最近交易</button>
           </div>
         </form>
 
@@ -409,7 +419,7 @@
         if (!item) {
           buttonText.innerHTML = `
             <span class="select-name">${role === 'sender' ? '请选择发送者' : '请选择接收者'}</span>
-            <span class="select-address">先在后台添加昵称和地址</span>
+            <span class="select-address">从地址名单 Excel 读取</span>
           `;
           return;
         }
@@ -432,6 +442,8 @@
         state[role] = state.addresses.find((item) => item.id === id) || null;
         renderSelected(role);
         closeMenus();
+        result.className = 'result';
+        result.innerHTML = '';
       };
 
       const renderOptions = () => {
@@ -439,7 +451,7 @@
           const menu = root.querySelector('.select-menu');
 
           if (!state.addresses.length) {
-            menu.innerHTML = '<div class="empty-options">暂无地址，请到后台编辑页面添加。</div>';
+            menu.innerHTML = '<div class="empty-options">暂无地址，请更新 data/address-book.xlsx。</div>';
             renderSelected(role);
             return;
           }
@@ -495,30 +507,32 @@
         if (event.key === 'Escape') closeMenus();
       });
 
-      const renderResult = (data) => {
+      const renderTransactions = (data) => {
         result.className = `result visible ${data.found ? 'found' : 'missing'}`;
 
         if (!data.found) {
           result.innerHTML = `
             <div class="status"><span class="dot"></span>${escapeHtml(data.message || '还没收到钱')}</div>
-            <div class="details">
-              <span>已检查</span><strong>${escapeHtml(data.checked?.transactions || 0)} 笔交易</strong>
-            </div>
+            <div class="summary">已检查 ${escapeHtml(data.checked?.transactions || 0)} 笔交易。</div>
           `;
           return;
         }
 
-        const trx = data.transaction;
+        const items = data.transactions.map((trx, index) => `
+          <a class="transaction" href="${escapeHtml(trx.explorerUrl)}" target="_blank" rel="noreferrer">
+            <span class="transaction-main">
+              <span class="transaction-title">第 ${index + 1} 笔 · ${escapeHtml(trx.age || '时间未知')}</span>
+              <span class="transaction-sub">区块 ${escapeHtml(trx.blockNumber || '-')}</span>
+              <span class="transaction-hash">${escapeHtml(trx.hash)}</span>
+            </span>
+            <span class="transaction-amount">${escapeHtml(trx.amount)} NXPC</span>
+          </a>
+        `).join('');
+
         result.innerHTML = `
-          <div class="status"><span class="dot"></span>${escapeHtml(data.message || '已收到钱')}</div>
-          <div class="details">
-            <span>交易 Hash</span><a href="${escapeHtml(trx.explorerUrl)}" target="_blank" rel="noreferrer">${escapeHtml(trx.hash)}</a>
-            <span>金额</span><strong>${escapeHtml(trx.amount)} NXPC</strong>
-            <span>发送者</span><strong>${escapeHtml(trx.from)}</strong>
-            <span>接收者</span><strong>${escapeHtml(trx.to)}</strong>
-            <span>时间</span><strong>${escapeHtml(trx.age || '-')}</strong>
-            <span>区块</span><strong>${escapeHtml(trx.blockNumber || '-')}</strong>
-          </div>
+          <div class="status"><span class="dot"></span>${escapeHtml(data.message || '已找到最近交易')}</div>
+          <div class="summary">显示最近 ${data.transactions.length} 笔匹配交易，已检查 ${escapeHtml(data.checked?.transactions || 0)} 笔。</div>
+          <div class="transactions">${items}</div>
         `;
       };
 
@@ -531,37 +545,29 @@
           return;
         }
 
-        const amount = document.querySelector('#amount').value.trim();
-        if (!amount) {
-          result.className = 'result visible missing';
-          result.innerHTML = '<div class="status"><span class="dot"></span>请填写金额。</div>';
-          return;
-        }
-
         button.disabled = true;
         button.textContent = '查询中...';
         result.className = 'result visible';
-        result.innerHTML = '<div class="status"><span class="dot"></span>正在查询</div>';
+        result.innerHTML = '<div class="status"><span class="dot"></span>正在查询最近交易</div>';
 
         try {
-          const response = await fetch('/api/search', {
+          const response = await fetch('/api/recent-transactions', {
             method: 'POST',
             headers: { 'content-type': 'application/json' },
             body: JSON.stringify({
               sender: state.sender.address,
               receiver: state.receiver.address,
-              amount,
             }),
           });
 
           const data = await response.json();
-          renderResult(data);
+          renderTransactions(data);
         } catch (error) {
           result.className = 'result visible missing';
           result.innerHTML = '<div class="status"><span class="dot"></span>查询失败，请稍后再试。</div>';
         } finally {
           button.disabled = false;
-          button.textContent = '查询';
+          button.textContent = '查询最近交易';
         }
       });
 

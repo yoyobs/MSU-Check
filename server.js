@@ -11,6 +11,7 @@ const CHAIN = 'NEXON';
 const PORT = Number(process.env.PORT || 3000);
 const MAX_PAGES = Number(process.env.MAX_PAGES || 20);
 const PAGE_SIZE = Number(process.env.PAGE_SIZE || 25);
+const RECENT_LIMIT = 10;
 const BODY_LIMIT = 1024 * 1024;
 
 const rootDir = fileURLToPath(new URL('.', import.meta.url));
@@ -23,12 +24,11 @@ let secretCache = {
 };
 
 const json = (res, status, payload) => {
-  const body = JSON.stringify(payload);
   res.writeHead(status, {
     'content-type': 'application/json; charset=utf-8',
     'cache-control': 'no-store',
   });
-  res.end(body);
+  res.end(JSON.stringify(payload));
 };
 
 const text = (res, status, payload, contentType = 'text/plain; charset=utf-8') => {
@@ -168,22 +168,6 @@ const explorerPost = async (path, body, retry = true) => {
 
 const normalizeAddress = (value) => String(value || '').trim().toLowerCase();
 
-const normalizeAmount = (value) => {
-  const trimmed = String(value ?? '').trim();
-  if (!trimmed) return '';
-
-  try {
-    const [integerPart, decimalPart = ''] = trimmed.split('.');
-    const normalizedInteger = BigInt(integerPart || '0').toString();
-    const normalizedDecimal = decimalPart.replace(/0+$/, '');
-    return normalizedDecimal ? `${normalizedInteger}.${normalizedDecimal}` : normalizedInteger;
-  } catch {
-    return trimmed.replace(/\.?0+$/, '');
-  }
-};
-
-const sameAmount = (a, b) => normalizeAmount(a) === normalizeAmount(b);
-
 const mapTransaction = (trx) => ({
   hash: trx.TRXHA,
   method: trx.MTH,
@@ -199,13 +183,12 @@ const mapTransaction = (trx) => ({
   explorerUrl: `${EXPLORER_ORIGIN}/transactions/${trx.TRXHA}`,
 });
 
-const findPayment = async ({ sender, receiver, amount }) => {
+const listRecentPayments = async ({ sender, receiver }) => {
   const senderAddress = normalizeAddress(sender);
   const receiverAddress = normalizeAddress(receiver);
-  const expectedAmount = normalizeAmount(amount);
 
-  if (!senderAddress || !receiverAddress || !expectedAmount) {
-    const error = new Error('请先选择发送者、接收者，并填写金额。');
+  if (!senderAddress || !receiverAddress) {
+    const error = new Error('请先选择发送者和接收者。');
     error.statusCode = 400;
     throw error;
   }
@@ -214,6 +197,7 @@ const findPayment = async ({ sender, receiver, amount }) => {
     pages: 0,
     transactions: 0,
   };
+  const matches = [];
 
   for (let page = 1; page <= MAX_PAGES; page += 1) {
     const data = await explorerPost('/api/address/transaction/list', {
@@ -226,27 +210,23 @@ const findPayment = async ({ sender, receiver, amount }) => {
     checked.pages = page;
     checked.transactions += list.length;
 
-    const match = list.find((trx) => {
+    for (const trx of list) {
       const from = normalizeAddress(trx.ADDRSFROMINFO?.ADDR);
       const to = normalizeAddress(trx.ADDRSTOINFO?.ADDR);
-      return from === senderAddress && to === receiverAddress && sameAmount(trx.VAL, expectedAmount);
-    });
 
-    if (match) {
-      return {
-        found: true,
-        message: '已收到钱',
-        transaction: mapTransaction(match),
-        checked,
-      };
+      if (from === senderAddress && to === receiverAddress) {
+        matches.push(mapTransaction(trx));
+        if (matches.length >= RECENT_LIMIT) break;
+      }
     }
 
-    if (list.length < PAGE_SIZE) break;
+    if (matches.length >= RECENT_LIMIT || list.length < PAGE_SIZE) break;
   }
 
   return {
-    found: false,
-    message: '还没收到钱',
+    found: matches.length > 0,
+    message: matches.length ? '已找到最近交易' : '还没收到钱',
+    transactions: matches,
     checked,
   };
 };
@@ -300,15 +280,16 @@ const readAddressBook = async () => {
   };
 };
 
-const handleSearch = async (req, res) => {
+const handleRecentTransactions = async (req, res) => {
   try {
     const body = await readJsonBody(req);
-    const result = await findPayment(body);
+    const result = await listRecentPayments(body);
     json(res, 200, result);
   } catch (error) {
     json(res, error.statusCode || 500, {
       found: false,
-      message: error.statusCode === 400 ? error.message : '查询失败，请稍后再试。',
+      message: error.statusCode === 400 ? error.message : '查询最近交易失败，请稍后再试。',
+      transactions: [],
       detail: error.message,
     });
   }
@@ -388,8 +369,8 @@ const serveStatic = async (req, res) => {
 const server = createServer(async (req, res) => {
   const url = new URL(req.url, 'http://localhost');
 
-  if (req.method === 'POST' && url.pathname === '/api/search') {
-    await handleSearch(req, res);
+  if (req.method === 'POST' && url.pathname === '/api/recent-transactions') {
+    await handleRecentTransactions(req, res);
     return;
   }
 
