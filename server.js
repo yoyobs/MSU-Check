@@ -285,7 +285,9 @@ const getTransactionDetail = async (hash) => {
   return transactionDetailCache.get(normalizedHash);
 };
 
-const listTokenTransfers = async ({ trx, addressSet, lookup }) => {
+const isNesoTransfer = (transfer) => String(transfer.TKNSINFO?.SB || '').trim().toUpperCase() === 'NESO';
+
+const listTokenTransfers = async ({ trx, lookup, matchTransfer }) => {
   const detail = await getTransactionDetail(trx.TRXHA);
   const transfers = Array.isArray(detail?.E20TLI) ? detail.E20TLI : [];
 
@@ -293,8 +295,7 @@ const listTokenTransfers = async ({ trx, addressSet, lookup }) => {
     .filter((transfer) => {
       const from = normalizeAddress(transfer.ADDRSFROMINFO?.ADDR);
       const to = normalizeAddress(transfer.ADDRSTOINFO?.ADDR);
-      const symbol = String(transfer.TKNSINFO?.SB || '').trim().toUpperCase();
-      return symbol === 'NESO' && from && to && from !== to && addressSet.has(from) && addressSet.has(to);
+      return isNesoTransfer(transfer) && from && to && from !== to && matchTransfer({ from, to, transfer });
     })
     .map((transfer) => withBookNames(mapTokenTransfer({ trx: detail, transfer }), lookup));
 };
@@ -334,8 +335,8 @@ const scanAddressHistory = async ({ address, sinceMs, addressSet, lookup }) => {
   const transactions = [];
   const details = await Promise.all(Array.from(candidates.values()).map((trx) => listTokenTransfers({
     trx,
-    addressSet,
     lookup,
+    matchTransfer: ({ from, to }) => addressSet.has(from) && addressSet.has(to),
   })));
 
   checked.details = candidates.size;
@@ -363,10 +364,13 @@ const listRecentPayments = async ({ sender, receiver }) => {
   const checked = {
     pages: 0,
     transactions: 0,
+    details: 0,
+    days: HISTORY_WINDOW_DAYS,
   };
   const matches = [];
+  const sinceMs = Date.now() - HISTORY_WINDOW_DAYS * 24 * 60 * 60 * 1000;
 
-  for (let page = 1; page <= MAX_PAGES; page += 1) {
+  for (let page = 1; ; page += 1) {
     const data = await explorerPost('/api/address/transaction/list', {
       address: receiverAddress,
       page,
@@ -377,17 +381,28 @@ const listRecentPayments = async ({ sender, receiver }) => {
     checked.pages = page;
     checked.transactions += list.length;
 
-    for (const trx of list) {
-      const from = normalizeAddress(trx.ADDRSFROMINFO?.ADDR);
-      const to = normalizeAddress(trx.ADDRSTOINFO?.ADDR);
+    let hasRecentTransaction = false;
+    const candidates = list.filter((trx) => {
+      const timestampMs = timestampToMs(trx.UT);
+      if (timestampMs >= sinceMs) hasRecentTransaction = true;
+      return timestampMs >= sinceMs;
+    });
+    const transferGroups = await Promise.all(candidates.map((trx) => listTokenTransfers({
+      trx,
+      lookup: new Map(),
+      matchTransfer: ({ from, to }) => from === senderAddress && to === receiverAddress,
+    })));
+    checked.details += candidates.length;
 
-      if (from === senderAddress && to === receiverAddress) {
-        matches.push(mapTransaction(trx));
+    for (const transfers of transferGroups) {
+      for (const transfer of transfers) {
+        matches.push(transfer);
         if (matches.length >= RECENT_LIMIT) break;
       }
+      if (matches.length >= RECENT_LIMIT) break;
     }
 
-    if (matches.length >= RECENT_LIMIT || list.length < PAGE_SIZE) break;
+    if (matches.length >= RECENT_LIMIT || list.length < PAGE_SIZE || !hasRecentTransaction) break;
   }
 
   return {
