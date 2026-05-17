@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="zh-Hant">
+<html lang="zh-Hans">
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -28,7 +28,7 @@
         min-height: 100vh;
         background: var(--bg);
         color: var(--text);
-        font-family: Arial, "Noto Sans TC", "Microsoft JhengHei", sans-serif;
+        font-family: Arial, "Noto Sans SC", "Microsoft YaHei", sans-serif;
       }
 
       main {
@@ -52,10 +52,15 @@
         letter-spacing: 0;
       }
 
-      .explorer-link {
+      .nav-links {
+        display: flex;
+        gap: 14px;
+        font-size: 14px;
+      }
+
+      .nav-links a {
         color: var(--blue);
         text-decoration: none;
-        font-size: 14px;
       }
 
       .checker {
@@ -71,18 +76,19 @@
         gap: 18px;
       }
 
-      label {
+      .field {
         display: grid;
         gap: 8px;
         color: var(--muted);
         font-size: 14px;
       }
 
-      label.amount {
+      .amount {
         grid-column: span 1;
       }
 
-      input {
+      input,
+      .select-button {
         width: 100%;
         min-height: 44px;
         border: 1px solid var(--line);
@@ -94,9 +100,101 @@
         outline: none;
       }
 
-      input:focus {
+      input:focus,
+      .select-button:focus {
         border-color: var(--blue);
         box-shadow: 0 0 0 3px rgba(92, 143, 250, 0.18);
+      }
+
+      .custom-select {
+        position: relative;
+      }
+
+      .select-button {
+        display: grid;
+        grid-template-columns: 1fr auto;
+        align-items: center;
+        gap: 10px;
+        min-height: 70px;
+        text-align: left;
+        cursor: pointer;
+      }
+
+      .select-button::after {
+        content: "";
+        width: 9px;
+        height: 9px;
+        border-right: 2px solid var(--muted);
+        border-bottom: 2px solid var(--muted);
+        transform: rotate(45deg) translateY(-2px);
+      }
+
+      .select-text {
+        min-width: 0;
+        display: grid;
+        gap: 4px;
+      }
+
+      .select-name {
+        color: var(--text);
+        font-weight: 700;
+        line-height: 1.3;
+      }
+
+      .select-address {
+        color: var(--muted);
+        font-family: Consolas, "SFMono-Regular", monospace;
+        font-size: 12px;
+        line-height: 1.4;
+        word-break: break-all;
+      }
+
+      .select-menu {
+        position: absolute;
+        z-index: 10;
+        top: calc(100% + 8px);
+        left: 0;
+        right: 0;
+        display: none;
+        max-height: 320px;
+        overflow: auto;
+        background: #0f1724;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        box-shadow: 0 18px 50px rgba(0, 0, 0, 0.35);
+        padding: 6px;
+      }
+
+      .custom-select.open .select-menu {
+        display: grid;
+        gap: 4px;
+      }
+
+      .option {
+        width: 100%;
+        border: 0;
+        border-radius: 6px;
+        background: transparent;
+        color: var(--text);
+        padding: 10px;
+        cursor: pointer;
+        text-align: left;
+      }
+
+      .option:hover,
+      .option.active {
+        background: var(--panel-2);
+      }
+
+      .option .select-name {
+        margin-bottom: 4px;
+      }
+
+      .empty-options {
+        padding: 14px;
+        color: var(--muted);
+        font-size: 14px;
+        line-height: 1.5;
       }
 
       .actions {
@@ -108,7 +206,7 @@
         margin-top: 4px;
       }
 
-      button {
+      button.primary {
         min-height: 44px;
         border: 0;
         border-radius: 6px;
@@ -120,7 +218,7 @@
         cursor: pointer;
       }
 
-      button:disabled {
+      button.primary:disabled {
         cursor: wait;
         opacity: 0.72;
       }
@@ -128,6 +226,7 @@
       .hint {
         color: var(--muted);
         font-size: 13px;
+        line-height: 1.5;
       }
 
       .result {
@@ -161,6 +260,7 @@
       }
 
       .dot {
+        flex: 0 0 auto;
         width: 10px;
         height: 10px;
         border-radius: 999px;
@@ -206,17 +306,21 @@
           flex-direction: column;
         }
 
+        .nav-links {
+          flex-wrap: wrap;
+        }
+
         form,
         .details {
           grid-template-columns: 1fr;
         }
 
-        label.amount,
+        .amount,
         .actions {
           grid-column: auto;
         }
 
-        button {
+        button.primary {
           width: 100%;
         }
       }
@@ -226,29 +330,48 @@
     <main>
       <div class="topbar">
         <h1>MSU 查账</h1>
-        <a class="explorer-link" href="https://msu-explorer.xangle.io/" target="_blank" rel="noreferrer">打开 Explorer</a>
+        <nav class="nav-links" aria-label="页面导航">
+          <a href="/admin.html">后台编辑</a>
+          <a href="https://msu-explorer.xangle.io/" target="_blank" rel="noreferrer">打开 Explorer</a>
+        </nav>
       </div>
 
       <section class="checker">
         <form id="checker-form">
-          <label>
-            发送者的地址
-            <input id="sender" name="sender" autocomplete="off" placeholder="0x..." required>
-          </label>
+          <div class="field">
+            <span>发送者的地址</span>
+            <div class="custom-select" data-role="sender">
+              <button class="select-button" type="button" aria-haspopup="listbox" aria-expanded="false">
+                <span class="select-text">
+                  <span class="select-name">请选择发送者</span>
+                  <span class="select-address">先在后台添加昵称和地址</span>
+                </span>
+              </button>
+              <div class="select-menu" role="listbox"></div>
+            </div>
+          </div>
 
-          <label>
-            接收者的地址
-            <input id="receiver" name="receiver" autocomplete="off" placeholder="0x..." required>
-          </label>
+          <div class="field">
+            <span>接收者的地址</span>
+            <div class="custom-select" data-role="receiver">
+              <button class="select-button" type="button" aria-haspopup="listbox" aria-expanded="false">
+                <span class="select-text">
+                  <span class="select-name">请选择接收者</span>
+                  <span class="select-address">先在后台添加昵称和地址</span>
+                </span>
+              </button>
+              <div class="select-menu" role="listbox"></div>
+            </div>
+          </div>
 
-          <label class="amount">
+          <label class="field amount">
             金额
             <input id="amount" name="amount" inputmode="decimal" autocomplete="off" placeholder="例如 10 或 10.5" required>
           </label>
 
           <div class="actions">
             <span class="hint">查询接收者最近交易，匹配发送者、接收者和 NXPC 金额。</span>
-            <button id="submit" type="submit">查询</button>
+            <button id="submit" class="primary" type="submit">查询</button>
           </div>
         </form>
 
@@ -260,17 +383,126 @@
       const form = document.querySelector('#checker-form');
       const button = document.querySelector('#submit');
       const result = document.querySelector('#result');
+      const selects = {
+        sender: document.querySelector('[data-role="sender"]'),
+        receiver: document.querySelector('[data-role="receiver"]'),
+      };
 
-      const field = (id) => document.querySelector(id).value.trim();
+      const state = {
+        addresses: [],
+        sender: null,
+        receiver: null,
+      };
+
+      const escapeHtml = (value) => String(value ?? '')
+        .replaceAll('&', '&amp;')
+        .replaceAll('<', '&lt;')
+        .replaceAll('>', '&gt;')
+        .replaceAll('"', '&quot;')
+        .replaceAll("'", '&#039;');
+
+      const renderSelected = (role) => {
+        const root = selects[role];
+        const buttonText = root.querySelector('.select-text');
+        const item = state[role];
+
+        if (!item) {
+          buttonText.innerHTML = `
+            <span class="select-name">${role === 'sender' ? '请选择发送者' : '请选择接收者'}</span>
+            <span class="select-address">先在后台添加昵称和地址</span>
+          `;
+          return;
+        }
+
+        buttonText.innerHTML = `
+          <span class="select-name">${escapeHtml(item.nickname)}</span>
+          <span class="select-address">${escapeHtml(item.address)}</span>
+        `;
+      };
+
+      const closeMenus = (except) => {
+        Object.values(selects).forEach((root) => {
+          if (root === except) return;
+          root.classList.remove('open');
+          root.querySelector('.select-button').setAttribute('aria-expanded', 'false');
+        });
+      };
+
+      const selectAddress = (role, id) => {
+        state[role] = state.addresses.find((item) => item.id === id) || null;
+        renderSelected(role);
+        closeMenus();
+      };
+
+      const renderOptions = () => {
+        Object.entries(selects).forEach(([role, root]) => {
+          const menu = root.querySelector('.select-menu');
+
+          if (!state.addresses.length) {
+            menu.innerHTML = '<div class="empty-options">暂无地址，请到后台编辑页面添加。</div>';
+            renderSelected(role);
+            return;
+          }
+
+          menu.innerHTML = state.addresses.map((item) => {
+            const active = state[role]?.id === item.id ? ' active' : '';
+            return `
+              <button class="option${active}" type="button" role="option" data-id="${escapeHtml(item.id)}">
+                <div class="select-name">${escapeHtml(item.nickname)}</div>
+                <div class="select-address">${escapeHtml(item.address)}</div>
+              </button>
+            `;
+          }).join('');
+
+          menu.querySelectorAll('.option').forEach((option) => {
+            option.addEventListener('click', () => selectAddress(role, option.dataset.id));
+          });
+
+          renderSelected(role);
+        });
+      };
+
+      const loadAddressBook = async () => {
+        try {
+          const response = await fetch('/api/address-book');
+          const data = await response.json();
+          state.addresses = Array.isArray(data.addresses) ? data.addresses : [];
+          state.sender = state.addresses[0] || null;
+          state.receiver = state.addresses[1] || state.addresses[0] || null;
+          renderOptions();
+        } catch (error) {
+          result.className = 'result visible missing';
+          result.innerHTML = '<div class="status"><span class="dot"></span>地址列表读取失败，请刷新页面重试。</div>';
+        }
+      };
+
+      Object.entries(selects).forEach(([role, root]) => {
+        const selectButton = root.querySelector('.select-button');
+        selectButton.addEventListener('click', () => {
+          const willOpen = !root.classList.contains('open');
+          closeMenus(root);
+          root.classList.toggle('open', willOpen);
+          selectButton.setAttribute('aria-expanded', String(willOpen));
+          renderOptions();
+        });
+      });
+
+      document.addEventListener('click', (event) => {
+        if (!event.target.closest('.custom-select')) closeMenus();
+      });
+
+      document.addEventListener('keydown', (event) => {
+        if (event.key === 'Escape') closeMenus();
+      });
 
       const renderResult = (data) => {
         result.className = `result visible ${data.found ? 'found' : 'missing'}`;
 
         if (!data.found) {
           result.innerHTML = `
-            <div class="status"><span class="dot"></span>${data.message || '还没收到钱'}</div>
+            <div class="status"><span class="dot"></span>${escapeHtml(data.message || '还没收到钱')}</div>
             <div class="details">
-              <span>已检查</span><strong>${data.checked?.transactions || 0} 笔交易</strong>
+              <span>已检查</span><strong>${escapeHtml(data.checked?.transactions || 0)} 笔交易</strong>
             </div>
           `;
           return;
@@ -278,20 +510,34 @@
 
         const trx = data.transaction;
         result.innerHTML = `
-          <div class="status"><span class="dot"></span>${data.message || '已收到钱'}</div>
+          <div class="status"><span class="dot"></span>${escapeHtml(data.message || '已收到钱')}</div>
           <div class="details">
-            <span>交易 Hash</span><a href="${trx.explorerUrl}" target="_blank" rel="noreferrer">${trx.hash}</a>
-            <span>金额</span><strong>${trx.amount} NXPC</strong>
-            <span>发送者</span><strong>${trx.from}</strong>
-            <span>接收者</span><strong>${trx.to}</strong>
-            <span>时间</span><strong>${trx.age || '-'}</strong>
-            <span>区块</span><strong>${trx.blockNumber || '-'}</strong>
+            <span>交易 Hash</span><a href="${escapeHtml(trx.explorerUrl)}" target="_blank" rel="noreferrer">${escapeHtml(trx.hash)}</a>
+            <span>金额</span><strong>${escapeHtml(trx.amount)} NXPC</strong>
+            <span>发送者</span><strong>${escapeHtml(trx.from)}</strong>
+            <span>接收者</span><strong>${escapeHtml(trx.to)}</strong>
+            <span>时间</span><strong>${escapeHtml(trx.age || '-')}</strong>
+            <span>区块</span><strong>${escapeHtml(trx.blockNumber || '-')}</strong>
           </div>
         `;
       };
 
       form.addEventListener('submit', async (event) => {
         event.preventDefault();
+
+        if (!state.sender || !state.receiver) {
+          result.className = 'result visible missing';
+          result.innerHTML = '<div class="status"><span class="dot"></span>请先选择发送者和接收者。</div>';
+          return;
+        }
+
+        const amount = document.querySelector('#amount').value.trim();
+        if (!amount) {
+          result.className = 'result visible missing';
+          result.innerHTML = '<div class="status"><span class="dot"></span>请填写金额。</div>';
+          return;
+        }
+
         button.disabled = true;
         button.textContent = '查询中...';
         result.className = 'result visible';
@@ -302,9 +548,9 @@
             method: 'POST',
             headers: { 'content-type': 'application/json' },
             body: JSON.stringify({
-              sender: field('#sender'),
-              receiver: field('#receiver'),
-              amount: field('#amount'),
+              sender: state.sender.address,
+              receiver: state.receiver.address,
+              amount,
             }),
           });
 
@@ -318,6 +564,8 @@
           button.textContent = '查询';
         }
       });
+
+      loadAddressBook();
     </script>
   </body>
 </html>

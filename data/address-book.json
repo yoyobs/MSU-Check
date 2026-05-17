@@ -1,0 +1,15 @@
+{
+  "addresses": [
+    {
+      "id": "sample-sender",
+      "nickname": "测试发送者",
+      "address": "0xd1ac3e418bb2fbc8272e1298e120e6b3f17150a6"
+    },
+    {
+      "id": "sample-receiver",
+      "nickname": "测试接收者",
+      "address": "0xce8e48fae05c093a4a1a1f569bdb53313d765937"
+    }
+  ],
+  "updatedAt": "2026-05-17T09:38:24.958Z"
+}
