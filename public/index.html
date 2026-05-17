@@ -173,6 +173,10 @@
         gap: 4px;
       }
 
+      .select-button .select-text {
+        pointer-events: none;
+      }
+
       .select-name,
       .transaction-title,
       .history-title {
@@ -724,7 +728,10 @@
           }).join('');
 
           menu.querySelectorAll('.option').forEach((option) => {
-            option.addEventListener('click', () => selectAddress(role, option.dataset.id));
+            option.addEventListener('click', (event) => {
+              event.stopPropagation();
+              selectAddress(role, option.dataset.id);
+            });
           });
 
           renderSelected(role);
@@ -747,7 +754,9 @@
 
       Object.entries(selects).forEach(([role, root]) => {
         const selectButton = root.querySelector('.select-button');
-        selectButton.addEventListener('click', () => {
+        root.addEventListener('click', (event) => {
+          if (event.target.closest('.select-menu')) return;
+
           const willOpen = !root.classList.contains('open');
           closeMenus(root);
           root.classList.toggle('open', willOpen);
