@@ -13,7 +13,7 @@ const MAX_PAGES = Number(process.env.MAX_PAGES || 20);
 const PAGE_SIZE = Number(process.env.PAGE_SIZE || 25);
 const RECENT_LIMIT = 2;
 const HISTORY_LIMIT = Number(process.env.HISTORY_LIMIT || 200);
-const HISTORY_WINDOW_DAYS = Number(process.env.HISTORY_WINDOW_DAYS || 14);
+const HISTORY_WINDOW_DAYS = Number(process.env.HISTORY_WINDOW_DAYS || 7);
 const HISTORY_CACHE_MS = Number(process.env.HISTORY_CACHE_MS || 60 * 1000);
 const HISTORY_ADDRESS_CONCURRENCY = Number(process.env.HISTORY_ADDRESS_CONCURRENCY || 8);
 const BODY_LIMIT = 1024 * 1024;
@@ -36,6 +36,8 @@ let historyCache = {
   value: null,
   expiresAt: 0,
 };
+
+const transactionDetailCache = new Map();
 
 const json = (res, status, payload) => {
   res.writeHead(status, {
@@ -226,6 +228,23 @@ const mapTransaction = (trx) => ({
   explorerUrl: `${EXPLORER_ORIGIN}/transactions/${trx.TRXHA}`,
 });
 
+const mapTokenTransfer = ({ trx, transfer }) => ({
+  hash: trx.TRXA || trx.TRXHA,
+  method: trx.MTH || 'transfer',
+  blockNumber: trx.BNO,
+  age: trx.AG,
+  from: transfer.ADDRSFROMINFO?.ADDR || '',
+  fromName: transfer.ADDRSFROMINFO?.NN || '',
+  to: transfer.ADDRSTOINFO?.ADDR || '',
+  toName: transfer.ADDRSTOINFO?.NN || '',
+  amount: transfer.QTY || trx.VAL,
+  tokenSymbol: transfer.TKNSINFO?.SB || 'NESO',
+  tokenName: transfer.TKNSINFO?.NN || '',
+  fee: trx.TRXF,
+  timestamp: trx.UT,
+  explorerUrl: `${EXPLORER_ORIGIN}/transactions/${trx.TRXA || trx.TRXHA}/transaction`,
+});
+
 const buildAddressLookup = (addresses) => {
   const lookup = new Map();
 
@@ -253,11 +272,42 @@ const timestampToMs = (timestamp) => {
   return value < 10_000_000_000 ? value * 1000 : value;
 };
 
+const getTransactionDetail = async (hash) => {
+  const normalizedHash = normalizeAddress(hash);
+  if (!normalizedHash) return null;
+
+  if (!transactionDetailCache.has(normalizedHash)) {
+    transactionDetailCache.set(normalizedHash, explorerPost('/api/transaction', {
+      trxHash: hash,
+    }));
+  }
+
+  return transactionDetailCache.get(normalizedHash);
+};
+
+const listTokenTransfers = async ({ trx, addressSet, lookup }) => {
+  const detail = await getTransactionDetail(trx.TRXHA);
+  const transfers = [
+    ...(Array.isArray(detail?.E20TLI) ? detail.E20TLI : []),
+    ...(Array.isArray(detail?.E721TLI) ? detail.E721TLI : []),
+    ...(Array.isArray(detail?.E1155TLI) ? detail.E1155TLI : []),
+  ];
+
+  return transfers
+    .filter((transfer) => {
+      const from = normalizeAddress(transfer.ADDRSFROMINFO?.ADDR);
+      const to = normalizeAddress(transfer.ADDRSTOINFO?.ADDR);
+      return from && to && from !== to && addressSet.has(from) && addressSet.has(to);
+    })
+    .map((transfer) => withBookNames(mapTokenTransfer({ trx: detail, transfer }), lookup));
+};
+
 const scanAddressHistory = async ({ address, sinceMs, addressSet, lookup }) => {
-  const transactions = [];
+  const candidates = new Map();
   const checked = {
     pages: 0,
     transactions: 0,
+    details: 0,
   };
 
   for (let page = 1; ; page += 1) {
@@ -278,15 +328,23 @@ const scanAddressHistory = async ({ address, sinceMs, addressSet, lookup }) => {
       if (timestampMs >= sinceMs) hasRecentTransaction = true;
       if (!timestampMs || timestampMs < sinceMs) continue;
 
-      const from = normalizeAddress(trx.ADDRSFROMINFO?.ADDR);
-      const to = normalizeAddress(trx.ADDRSTOINFO?.ADDR);
-
-      if (from && to && from !== to && addressSet.has(from) && addressSet.has(to)) {
-        transactions.push(withBookNames(mapTransaction(trx), lookup));
-      }
+      candidates.set(normalizeAddress(trx.TRXHA), trx);
     }
 
     if (list.length < PAGE_SIZE || !hasRecentTransaction) break;
+  }
+
+  const transactions = [];
+  const details = await Promise.all(Array.from(candidates.values()).map((trx) => listTokenTransfers({
+    trx,
+    addressSet,
+    lookup,
+  })));
+
+  checked.details = candidates.size;
+
+  for (const items of details) {
+    transactions.push(...items);
   }
 
   return {
