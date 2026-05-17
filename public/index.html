@@ -648,8 +648,13 @@
       const formatAmount = (value) => {
         const text = String(value ?? '').trim();
         if (!text) return '0';
-        if (!text.includes('.')) return text;
-        return text.replace(/(\.\d*?)0+$/, '$1').replace(/\.$/, '');
+        const normalized = text.includes('.')
+          ? text.replace(/(\.\d*?)0+$/, '$1').replace(/\.$/, '')
+          : text;
+        const [integerPart, decimalPart] = normalized.split('.');
+        const signedInteger = integerPart.replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+
+        return decimalPart ? `${signedInteger}.${decimalPart}` : signedInteger;
       };
 
       const setHistoryState = (text) => {
