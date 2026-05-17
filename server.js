@@ -287,17 +287,14 @@ const getTransactionDetail = async (hash) => {
 
 const listTokenTransfers = async ({ trx, addressSet, lookup }) => {
   const detail = await getTransactionDetail(trx.TRXHA);
-  const transfers = [
-    ...(Array.isArray(detail?.E20TLI) ? detail.E20TLI : []),
-    ...(Array.isArray(detail?.E721TLI) ? detail.E721TLI : []),
-    ...(Array.isArray(detail?.E1155TLI) ? detail.E1155TLI : []),
-  ];
+  const transfers = Array.isArray(detail?.E20TLI) ? detail.E20TLI : [];
 
   return transfers
     .filter((transfer) => {
       const from = normalizeAddress(transfer.ADDRSFROMINFO?.ADDR);
       const to = normalizeAddress(transfer.ADDRSTOINFO?.ADDR);
-      return from && to && from !== to && addressSet.has(from) && addressSet.has(to);
+      const symbol = String(transfer.TKNSINFO?.SB || '').trim().toUpperCase();
+      return symbol === 'NESO' && from && to && from !== to && addressSet.has(from) && addressSet.has(to);
     })
     .map((transfer) => withBookNames(mapTokenTransfer({ trx: detail, transfer }), lookup));
 };

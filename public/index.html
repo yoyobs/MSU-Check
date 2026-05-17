@@ -645,6 +645,13 @@
         .replaceAll('"', '&quot;')
         .replaceAll("'", '&#039;');
 
+      const formatAmount = (value) => {
+        const text = String(value ?? '').trim();
+        if (!text) return '0';
+        if (!text.includes('.')) return text;
+        return text.replace(/(\.\d*?)0+$/, '$1').replace(/\.$/, '');
+      };
+
       const setHistoryState = (text) => {
         historyState.innerHTML = `<span class="dot"></span>${escapeHtml(text)}`;
       };
@@ -770,7 +777,7 @@
               <span class="transaction-sub">区块 ${escapeHtml(trx.blockNumber || '-')}</span>
               <span class="transaction-hash">${escapeHtml(trx.hash)}</span>
             </span>
-            <span class="transaction-amount">${escapeHtml(trx.amount)} NXPC</span>
+            <span class="transaction-amount">${escapeHtml(formatAmount(trx.amount))} NESO</span>
           </a>
         `).join('');
 
@@ -799,7 +806,7 @@
               <span class="history-sub">${escapeHtml(trx.age || '时间未知')} · 区块 ${escapeHtml(trx.blockNumber || '-')}</span>
               <span class="history-hash">${escapeHtml(trx.hash)}</span>
             </span>
-            <span class="history-amount">${escapeHtml(trx.amount)} ${escapeHtml(trx.tokenSymbol || 'NESO')}</span>
+            <span class="history-amount">${escapeHtml(formatAmount(trx.amount))} NESO</span>
           </a>
         `).join('') + `
           <div class="empty-options">${escapeHtml(renderHistoryCheckSummary(data.checked))}</div>
