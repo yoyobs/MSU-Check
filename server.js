@@ -356,7 +356,7 @@ const listRecentPayments = async ({ sender, receiver }) => {
   const receiverAddress = normalizeAddress(receiver);
 
   if (!senderAddress || !receiverAddress) {
-    const error = new Error('请先选择发送者和接收者。');
+    const error = new Error('请先选择交易者A和交易者B。');
     error.statusCode = 400;
     throw error;
   }
@@ -367,43 +367,32 @@ const listRecentPayments = async ({ sender, receiver }) => {
     details: 0,
     days: HISTORY_WINDOW_DAYS,
   };
-  const matches = [];
   const sinceMs = Date.now() - HISTORY_WINDOW_DAYS * 24 * 60 * 60 * 1000;
+  const addressSet = new Set([senderAddress, receiverAddress]);
+  const { addresses } = await readAddressBook();
+  const lookup = buildAddressLookup(addresses);
+  const byHash = new Map();
 
-  for (let page = 1; ; page += 1) {
-    const data = await explorerPost('/api/address/transaction/list', {
-      address: receiverAddress,
-      page,
-      size: PAGE_SIZE,
+  for (const address of addressSet) {
+    const result = await scanAddressHistory({
+      address,
+      sinceMs,
+      addressSet,
+      lookup,
     });
 
-    const list = Array.isArray(data.TRXLIST) ? data.TRXLIST : [];
-    checked.pages = page;
-    checked.transactions += list.length;
+    checked.pages += result.checked.pages;
+    checked.transactions += result.checked.transactions;
+    checked.details += result.checked.details;
 
-    let hasRecentTransaction = false;
-    const candidates = list.filter((trx) => {
-      const timestampMs = timestampToMs(trx.UT);
-      if (timestampMs >= sinceMs) hasRecentTransaction = true;
-      return timestampMs >= sinceMs;
-    });
-    const transferGroups = await Promise.all(candidates.map((trx) => listTokenTransfers({
-      trx,
-      lookup: new Map(),
-      matchTransfer: ({ from, to }) => from === senderAddress && to === receiverAddress,
-    })));
-    checked.details += candidates.length;
-
-    for (const transfers of transferGroups) {
-      for (const transfer of transfers) {
-        matches.push(transfer);
-        if (matches.length >= RECENT_LIMIT) break;
-      }
-      if (matches.length >= RECENT_LIMIT) break;
+    for (const transaction of result.transactions) {
+      byHash.set(transaction.hash, transaction);
     }
-
-    if (matches.length >= RECENT_LIMIT || list.length < PAGE_SIZE || !hasRecentTransaction) break;
   }
+
+  const matches = Array.from(byHash.values())
+    .sort((a, b) => timestampToMs(b.timestamp) - timestampToMs(a.timestamp))
+    .slice(0, RECENT_LIMIT);
 
   return {
     found: matches.length > 0,
