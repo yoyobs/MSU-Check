@@ -273,6 +273,77 @@ const timestampToMs = (timestamp) => {
   return value < 10_000_000_000 ? value * 1000 : value;
 };
 
+const parseDateBoundary = (value, boundary) => {
+  const text = String(value || '').trim();
+  if (!text) return NaN;
+
+  const dateOnly = text.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (dateOnly) {
+    const year = Number(dateOnly[1]);
+    const month = Number(dateOnly[2]);
+    const day = Number(dateOnly[3]);
+    const timezoneOffsetMs = 8 * 60 * 60 * 1000;
+
+    return boundary === 'end'
+      ? Date.UTC(year, month - 1, day + 1) - timezoneOffsetMs - 1
+      : Date.UTC(year, month - 1, day) - timezoneOffsetMs;
+  }
+
+  return Date.parse(text);
+};
+
+const parseDateRange = ({ startDate, endDate }) => {
+  const startMs = parseDateBoundary(startDate, 'start');
+  const endMs = parseDateBoundary(endDate, 'end');
+
+  if (!Number.isFinite(startMs) || !Number.isFinite(endMs)) {
+    const error = new Error('Invalid date range. Use YYYY-MM-DD or ISO date strings.');
+    error.statusCode = 400;
+    throw error;
+  }
+
+  if (endMs < startMs) {
+    const error = new Error('endDate must be greater than or equal to startDate.');
+    error.statusCode = 400;
+    throw error;
+  }
+
+  return { startMs, endMs };
+};
+
+const amountScale = 10n ** 18n;
+
+const parseNesoAmountUnits = (value) => {
+  const text = String(value ?? '').trim().replace(/,/g, '');
+  if (!/^\d+(?:\.\d+)?$/.test(text)) return null;
+
+  const [whole, fraction = ''] = text.split('.');
+  const extraFraction = fraction.slice(18);
+  if (/[1-9]/.test(extraFraction)) return null;
+
+  return BigInt(whole) * amountScale + BigInt((fraction.slice(0, 18) + '0'.repeat(18)).slice(0, 18));
+};
+
+const requireAddress = (value, fieldName) => {
+  const address = normalizeAddress(value);
+  if (!/^0x[a-f0-9]{40}$/.test(address)) {
+    const error = new Error(`${fieldName} must be a valid 0x address.`);
+    error.statusCode = 400;
+    throw error;
+  }
+
+  return address;
+};
+
+const getQueryValue = (searchParams, names) => {
+  for (const name of names) {
+    const value = searchParams.get(name);
+    if (value !== null) return value;
+  }
+
+  return null;
+};
+
 const getTransactionDetail = async (hash) => {
   const normalizedHash = normalizeAddress(hash);
   if (!normalizedHash) return null;
@@ -459,6 +530,64 @@ const listRecentPayments = async ({ sender, receiver }) => {
     transactions: matches,
     checked,
   };
+};
+
+const findTransferByQuery = async ({ startDate, endDate, sender, receiver, amount }) => {
+  const senderAddress = requireAddress(sender, 'sender');
+  const receiverAddress = requireAddress(receiver, 'receiver');
+  const { startMs, endMs } = parseDateRange({ startDate, endDate });
+  const expectedAmount = parseNesoAmountUnits(amount);
+
+  if (expectedAmount === null) {
+    const error = new Error('amount must be a valid NESO amount with up to 18 decimal places.');
+    error.statusCode = 400;
+    throw error;
+  }
+
+  const { addresses } = await readAddressBook();
+  const lookup = buildAddressLookup(addresses);
+  const scannedHashes = new Set();
+  const scanAddresses = Array.from(new Set([senderAddress, receiverAddress]));
+
+  for (const address of scanAddresses) {
+    for (let page = 1; ; page += 1) {
+      const data = await explorerPost('/api/address/transaction/list', {
+        address,
+        page,
+        size: PAGE_SIZE,
+      });
+
+      const list = Array.isArray(data.TRXLIST) ? data.TRXLIST : [];
+      let hasTransactionWithinOrAfterStart = false;
+
+      for (const trx of list) {
+        const timestampMs = timestampToMs(trx.UT);
+        if (!timestampMs) continue;
+        if (timestampMs >= startMs) hasTransactionWithinOrAfterStart = true;
+        if (timestampMs < startMs || timestampMs > endMs) continue;
+
+        const hash = normalizeAddress(trx.TRXHA);
+        if (!hash || scannedHashes.has(hash)) continue;
+        scannedHashes.add(hash);
+
+        const transfers = await listTokenTransfers({
+          trx,
+          lookup,
+          matchTransfer: ({ from, to, transfer }) => (
+            from === senderAddress
+            && to === receiverAddress
+            && parseNesoAmountUnits(transfer.QTY) === expectedAmount
+          ),
+        });
+
+        if (transfers.length) return true;
+      }
+
+      if (list.length < PAGE_SIZE || !hasTransactionWithinOrAfterStart) break;
+    }
+  }
+
+  return false;
 };
 
 const listAddressBookHistory = async ({ selectedAddress } = {}) => {
@@ -661,6 +790,26 @@ const handleHistory = async (req, res) => {
   }
 };
 
+const handleCheckTransfer = async (req, res) => {
+  try {
+    const url = new URL(req.url, 'http://localhost');
+    const result = await findTransferByQuery({
+      startDate: getQueryValue(url.searchParams, ['startDate', 'start', 'fromDate', '查詢開始日期', '查询开始日期']),
+      endDate: getQueryValue(url.searchParams, ['endDate', 'end', 'toDate', '查詢結束日期', '查询结束日期']),
+      sender: getQueryValue(url.searchParams, ['sender', 'from', '傳送者', '传送者', '發送者', '发送者']),
+      receiver: getQueryValue(url.searchParams, ['receiver', 'to', '接收者']),
+      amount: getQueryValue(url.searchParams, ['amount', '金額', '金额']),
+    });
+
+    json(res, 200, { status: result });
+  } catch (error) {
+    json(res, error.statusCode || 500, {
+      status: false,
+      error: error.message,
+    });
+  }
+};
+
 const handleVersion = async (res) => {
   try {
     json(res, 200, {
@@ -747,6 +896,11 @@ const server = createServer(async (req, res) => {
 
   if (req.method === 'GET' && url.pathname === '/api/history') {
     await handleHistory(req, res);
+    return;
+  }
+
+  if (req.method === 'GET' && url.pathname === '/api/check-transfer') {
+    await handleCheckTransfer(req, res);
     return;
   }
 
