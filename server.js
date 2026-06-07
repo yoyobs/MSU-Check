@@ -97,6 +97,7 @@ const getAppVersion = async () => {
 
   const files = [
     join(rootDir, 'server.js'),
+    join(rootDir, 'address-book.js'),
     join(rootDir, 'package.json'),
     join(publicDir, 'index.html'),
     addressBookPath,
