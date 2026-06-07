@@ -1,2 +1,3 @@
 data/admin-password.txt
 node_modules/
+.vercel/
