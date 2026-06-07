@@ -84,11 +84,18 @@
         text-decoration: none;
         font-weight: 700;
         white-space: nowrap;
+        font: inherit;
+        cursor: pointer;
       }
 
       .top-action:hover {
         border-color: rgba(92, 143, 250, 0.75);
         background: var(--panel-2);
+      }
+
+      .top-action:disabled {
+        cursor: wait;
+        opacity: 0.68;
       }
 
       .top-action.primary-link {
@@ -362,6 +369,92 @@
         cursor: pointer;
       }
 
+      .upload-modal {
+        position: fixed;
+        inset: 0;
+        z-index: 30;
+        display: none;
+        place-items: center;
+        padding: 16px;
+        background: rgba(6, 10, 18, 0.72);
+      }
+
+      .upload-modal.visible {
+        display: grid;
+      }
+
+      .upload-dialog {
+        width: min(440px, 100%);
+        display: grid;
+        gap: 16px;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: var(--panel);
+        padding: 22px;
+        box-shadow: 0 24px 70px rgba(0, 0, 0, 0.42);
+      }
+
+      .upload-field {
+        display: grid;
+        gap: 8px;
+        color: var(--muted);
+        font-size: 14px;
+      }
+
+      .upload-field input {
+        min-height: 42px;
+        border: 1px solid var(--line);
+        border-radius: 6px;
+        background: #0f1724;
+        color: var(--text);
+        padding: 8px 10px;
+        font: inherit;
+      }
+
+      .upload-message {
+        min-height: 20px;
+        color: var(--muted);
+        font-size: 13px;
+        line-height: 1.45;
+      }
+
+      .upload-message.error {
+        color: var(--red);
+      }
+
+      .upload-message.success {
+        color: var(--green);
+      }
+
+      .upload-actions {
+        display: flex;
+        justify-content: flex-end;
+        gap: 10px;
+      }
+
+      .upload-actions button {
+        min-height: 38px;
+        border: 1px solid var(--line);
+        border-radius: 6px;
+        background: #0f1724;
+        color: var(--text);
+        padding: 0 14px;
+        font: inherit;
+        font-weight: 700;
+        cursor: pointer;
+      }
+
+      .upload-actions button:disabled {
+        cursor: wait;
+        opacity: 0.68;
+      }
+
+      .upload-actions .primary {
+        border-color: rgba(92, 143, 250, 0.65);
+        background: var(--blue);
+        color: white;
+      }
+
       @keyframes update-bounce {
         0%,
         100% {
@@ -425,6 +518,7 @@
       <div class="topbar">
         <h1>大锅菜查账专用网</h1>
         <nav class="nav-links" aria-label="页面导航">
+          <button id="open-upload" class="top-action" type="button">上传名单</button>
           <a class="top-action primary-link" href="https://msu-explorer.xangle.io/" target="_blank" rel="noreferrer">Explorer</a>
         </nav>
       </div>
@@ -485,6 +579,25 @@
       <button id="reload-page" class="update-toast-button" type="button">刷新页面</button>
     </div>
 
+    <div id="upload-modal" class="upload-modal" hidden role="dialog" aria-modal="true" aria-labelledby="upload-title">
+      <form id="upload-form" class="upload-dialog">
+        <h2 id="upload-title">上传名单</h2>
+        <label class="upload-field">
+          <span>管理员密码</span>
+          <input id="upload-password" type="password" autocomplete="current-password" required>
+        </label>
+        <label class="upload-field">
+          <span>名单 Excel</span>
+          <input id="upload-file" type="file" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" required>
+        </label>
+        <div id="upload-message" class="upload-message" aria-live="polite">请选择 .xlsx 名单文件。</div>
+        <div class="upload-actions">
+          <button id="cancel-upload" type="button">取消</button>
+          <button id="submit-upload" class="primary" type="submit">上传并更新</button>
+        </div>
+      </form>
+    </div>
+
     <script>
       const addressList = document.querySelector('#address-list');
       const addressCount = document.querySelector('#address-count');
@@ -493,6 +606,14 @@
       const historyState = document.querySelector('#history-state');
       const updateToast = document.querySelector('#update-toast');
       const reloadPageButton = document.querySelector('#reload-page');
+      const openUploadButton = document.querySelector('#open-upload');
+      const uploadModal = document.querySelector('#upload-modal');
+      const uploadForm = document.querySelector('#upload-form');
+      const uploadPassword = document.querySelector('#upload-password');
+      const uploadFile = document.querySelector('#upload-file');
+      const uploadMessage = document.querySelector('#upload-message');
+      const cancelUploadButton = document.querySelector('#cancel-upload');
+      const submitUploadButton = document.querySelector('#submit-upload');
 
       const state = {
         addresses: [],
@@ -503,6 +624,7 @@
         appVersion: null,
         versionTimer: null,
         updateVisible: false,
+        uploadLoading: false,
       };
 
       const escapeHtml = (value) => String(value ?? '')
@@ -526,6 +648,34 @@
 
       const setHistoryState = (text) => {
         historyState.innerHTML = `<span class="dot"></span>${escapeHtml(text)}`;
+      };
+
+      const setUploadMessage = (message, type = '') => {
+        uploadMessage.className = `upload-message${type ? ` ${type}` : ''}`;
+        uploadMessage.textContent = message;
+      };
+
+      const setUploadLoading = (loading) => {
+        state.uploadLoading = loading;
+        openUploadButton.disabled = loading;
+        cancelUploadButton.disabled = loading;
+        submitUploadButton.disabled = loading;
+        submitUploadButton.textContent = loading ? '上传中...' : '上传并更新';
+      };
+
+      const openUploadModal = () => {
+        uploadModal.hidden = false;
+        uploadModal.classList.add('visible');
+        setUploadMessage('请选择 .xlsx 名单文件。');
+        uploadPassword.focus();
+      };
+
+      const closeUploadModal = () => {
+        if (state.uploadLoading) return;
+        uploadModal.classList.remove('visible');
+        uploadModal.hidden = true;
+        uploadForm.reset();
+        setUploadMessage('请选择 .xlsx 名单文件。');
       };
 
       const renderHistoryCheckSummary = (checked) => {
@@ -696,6 +846,68 @@
 
       reloadPageButton.addEventListener('click', () => {
         window.location.reload();
+      });
+
+      openUploadButton.addEventListener('click', openUploadModal);
+      cancelUploadButton.addEventListener('click', closeUploadModal);
+
+      uploadModal.addEventListener('click', (event) => {
+        if (event.target === uploadModal) closeUploadModal();
+      });
+
+      document.addEventListener('keydown', (event) => {
+        if (event.key === 'Escape' && !uploadModal.hidden) closeUploadModal();
+      });
+
+      uploadForm.addEventListener('submit', async (event) => {
+        event.preventDefault();
+        if (state.uploadLoading) return;
+
+        const file = uploadFile.files?.[0];
+        const password = uploadPassword.value.trim();
+
+        if (!file) {
+          setUploadMessage('请选择名单 Excel 文件。', 'error');
+          return;
+        }
+
+        if (!file.name.toLowerCase().endsWith('.xlsx')) {
+          setUploadMessage('只支持上传 .xlsx 名单文件。', 'error');
+          return;
+        }
+
+        if (!password) {
+          setUploadMessage('请输入管理员密码。', 'error');
+          return;
+        }
+
+        setUploadLoading(true);
+        setUploadMessage('上传中...');
+
+        try {
+          const response = await fetch('/api/address-book/upload', {
+            method: 'POST',
+            headers: {
+              'content-type': file.type || 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+              'x-admin-password': password,
+              'x-file-name': encodeURIComponent(file.name),
+            },
+            body: file,
+          });
+          const data = await response.json().catch(() => ({}));
+
+          if (!response.ok) {
+            throw new Error(data.message || '上传名单失败。');
+          }
+
+          setUploadMessage(data.message || '名单已更新。', 'success');
+          await loadAddressBook();
+          await checkAppVersion();
+        } catch (error) {
+          setUploadMessage(error instanceof Error ? error.message : '上传名单失败。', 'error');
+        } finally {
+          setUploadLoading(false);
+        }
       });
 
       loadAddressBook();

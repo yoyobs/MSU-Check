@@ -1,9 +1,13 @@
 import { createServer } from 'node:http';
-import { readFile } from 'node:fs/promises';
+import { readFile, rename, writeFile } from 'node:fs/promises';
 import { extname, isAbsolute, join, normalize, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { createHash, webcrypto } from 'node:crypto';
-import XLSX from 'xlsx';
+import { createHash, timingSafeEqual, webcrypto } from 'node:crypto';
+import {
+  DEFAULT_ADDRESS_BOOK_UPLOAD_LIMIT_BYTES,
+  parseAddressBookBuffer,
+  validateAddressBookUpload,
+} from './address-book.js';
 
 const API_BASE = 'https://api-gateway.xangle.io';
 const EXPLORER_ORIGIN = 'https://msu-explorer.xangle.io';
@@ -17,10 +21,16 @@ const HISTORY_WINDOW_DAYS = Number(process.env.HISTORY_WINDOW_DAYS || 7);
 const HISTORY_CACHE_MS = Number(process.env.HISTORY_CACHE_MS || 60 * 1000);
 const HISTORY_ADDRESS_CONCURRENCY = Number(process.env.HISTORY_ADDRESS_CONCURRENCY || 8);
 const BODY_LIMIT = 1024 * 1024;
+const ADDRESS_BOOK_UPLOAD_LIMIT = Number(
+  process.env.ADDRESS_BOOK_UPLOAD_LIMIT_BYTES || DEFAULT_ADDRESS_BOOK_UPLOAD_LIMIT_BYTES,
+);
+const ADDRESS_BOOK_REPO_PATH = 'data/address-book.xlsx';
+const ADDRESS_BOOK_COMMIT_MESSAGE = 'chore: update address book from website';
 
 const rootDir = fileURLToPath(new URL('.', import.meta.url));
 const publicDir = join(rootDir, 'public');
 const addressBookPath = join(rootDir, 'data', 'address-book.xlsx');
+const adminPasswordPath = join(rootDir, 'data', 'admin-password.txt');
 
 let appVersionCache = {
   value: '',
@@ -39,6 +49,7 @@ let historyCache = {
 
 const filteredHistoryCache = new Map();
 const transactionDetailCache = new Map();
+let addressBookRuntimeBuffer = null;
 
 const json = (res, status, payload) => {
   res.writeHead(status, {
@@ -56,13 +67,13 @@ const text = (res, status, payload, contentType = 'text/plain; charset=utf-8') =
   res.end(payload);
 };
 
-const readJsonBody = async (req) => {
+const readRequestBuffer = async (req, limit = BODY_LIMIT) => {
   const chunks = [];
   let size = 0;
 
   for await (const chunk of req) {
     size += chunk.length;
-    if (size > BODY_LIMIT) {
+    if (size > limit) {
       const error = new Error('请求内容太大。');
       error.statusCode = 413;
       throw error;
@@ -70,8 +81,13 @@ const readJsonBody = async (req) => {
     chunks.push(chunk);
   }
 
-  if (!chunks.length) return {};
-  return JSON.parse(Buffer.concat(chunks).toString('utf8'));
+  return chunks.length ? Buffer.concat(chunks) : Buffer.alloc(0);
+};
+
+const readJsonBody = async (req) => {
+  const buffer = await readRequestBuffer(req, BODY_LIMIT);
+  if (!buffer.length) return {};
+  return JSON.parse(buffer.toString('utf8'));
 };
 
 const getAppVersion = async () => {
@@ -89,7 +105,9 @@ const getAppVersion = async () => {
 
   for (const file of files) {
     try {
-      hash.update(await readFile(file));
+      hash.update(file === addressBookPath && addressBookRuntimeBuffer
+        ? addressBookRuntimeBuffer
+        : await readFile(file));
     } catch {
       hash.update(file);
     }
@@ -101,6 +119,145 @@ const getAppVersion = async () => {
   };
 
   return appVersionCache.value;
+};
+
+const createApiError = (message, statusCode = 500) => {
+  const error = new Error(message);
+  error.statusCode = statusCode;
+  return error;
+};
+
+const getHeaderValue = (req, name) => {
+  const value = req.headers[name.toLowerCase()];
+  return Array.isArray(value) ? value[0] : value || '';
+};
+
+const readAddressBookBuffer = async () => (
+  addressBookRuntimeBuffer || readFile(addressBookPath)
+);
+
+const resetAddressBookCaches = () => {
+  appVersionCache = { value: '', expiresAt: 0 };
+  historyCache = { value: null, expiresAt: 0 };
+  filteredHistoryCache.clear();
+};
+
+const getConfiguredAdminPassword = async () => {
+  const envPassword = String(process.env.ADDRESS_BOOK_ADMIN_PASSWORD || '').trim();
+  if (envPassword) return envPassword;
+
+  try {
+    const filePassword = String(await readFile(adminPasswordPath, 'utf8')).trim();
+    return filePassword || null;
+  } catch {
+    return null;
+  }
+};
+
+const passwordDigest = (value) => createHash('sha256').update(String(value)).digest();
+
+const verifyAdminPassword = async (req) => {
+  const expectedPassword = await getConfiguredAdminPassword();
+  if (!expectedPassword) {
+    throw createApiError('管理员密码未配置，请先设置 ADDRESS_BOOK_ADMIN_PASSWORD 或 data/admin-password.txt。', 503);
+  }
+
+  const providedPassword = String(getHeaderValue(req, 'x-admin-password')).trim();
+  if (!providedPassword || !timingSafeEqual(passwordDigest(providedPassword), passwordDigest(expectedPassword))) {
+    throw createApiError('管理员密码不正确。', 401);
+  }
+};
+
+const getGitHubUploadConfig = () => {
+  const token = String(process.env.ADDRESS_BOOK_GITHUB_TOKEN || process.env.GITHUB_TOKEN || '').trim();
+  if (!token) return null;
+
+  return {
+    token,
+    repo: String(process.env.ADDRESS_BOOK_GITHUB_REPO || process.env.GITHUB_REPOSITORY || 'yoyobs/MSU-Check').trim(),
+    branch: String(process.env.ADDRESS_BOOK_GITHUB_BRANCH || process.env.VERCEL_GIT_COMMIT_REF || 'main').trim(),
+  };
+};
+
+const gitHubHeaders = (token) => ({
+  accept: 'application/vnd.github+json',
+  authorization: `Bearer ${token}`,
+  'content-type': 'application/json',
+  'x-github-api-version': '2022-11-28',
+});
+
+const gitHubContentUrl = ({ repo, branch }, includeRef = false) => {
+  const path = ADDRESS_BOOK_REPO_PATH.split('/').map(encodeURIComponent).join('/');
+  const url = `https://api.github.com/repos/${repo}/contents/${path}`;
+  return includeRef ? `${url}?ref=${encodeURIComponent(branch)}` : url;
+};
+
+const getGitHubFileSha = async (config) => {
+  const response = await fetch(gitHubContentUrl(config, true), {
+    headers: gitHubHeaders(config.token),
+  });
+
+  if (response.status === 404) return null;
+
+  if (!response.ok) {
+    throw createApiError('读取 GitHub 名单文件失败。', 502);
+  }
+
+  const data = await response.json();
+  return data.sha || null;
+};
+
+const commitAddressBookToGitHub = async (buffer, config) => {
+  const sha = await getGitHubFileSha(config);
+  const response = await fetch(gitHubContentUrl(config), {
+    method: 'PUT',
+    headers: gitHubHeaders(config.token),
+    body: JSON.stringify({
+      message: ADDRESS_BOOK_COMMIT_MESSAGE,
+      content: buffer.toString('base64'),
+      branch: config.branch,
+      ...(sha ? { sha } : {}),
+    }),
+  });
+
+  if (!response.ok) {
+    throw createApiError('提交 GitHub 名单文件失败。', 502);
+  }
+
+  const data = await response.json();
+  return {
+    mode: 'github',
+    branch: config.branch,
+    commit: data.commit?.sha || '',
+    url: data.commit?.html_url || '',
+  };
+};
+
+const replaceLocalAddressBook = async (buffer) => {
+  const tempPath = `${addressBookPath}.${Date.now()}.tmp`;
+  await writeFile(tempPath, buffer);
+  await rename(tempPath, addressBookPath);
+  return { mode: 'local' };
+};
+
+const persistAddressBookUpload = async (buffer) => {
+  const gitHubConfig = getGitHubUploadConfig();
+
+  if (gitHubConfig) {
+    const result = await commitAddressBookToGitHub(buffer, gitHubConfig);
+    addressBookRuntimeBuffer = Buffer.from(buffer);
+    resetAddressBookCaches();
+    return result;
+  }
+
+  if (process.env.VERCEL) {
+    throw createApiError('线上上传需要先在 Vercel 配置 ADDRESS_BOOK_GITHUB_TOKEN。', 503);
+  }
+
+  const result = await replaceLocalAddressBook(buffer);
+  addressBookRuntimeBuffer = null;
+  resetAddressBookCaches();
+  return result;
 };
 
 const randomHash = () => {
@@ -696,53 +853,9 @@ const listAddressBookHistory = async ({ selectedAddress } = {}) => {
   return result;
 };
 
-const sanitizeAddressEntry = (entry, rowNumber) => {
-  const nickname = String(entry?.nickname || '').trim();
-  const address = String(entry?.address || '').trim();
-
-  if (!nickname && !address) return null;
-
-  if (!nickname || !/^0x[a-fA-F0-9]{40}$/.test(address)) {
-    return {
-      invalid: true,
-      rowNumber,
-      nickname,
-      address,
-    };
-  }
-
-  return {
-    id: `${rowNumber}-${address.toLowerCase()}`,
-    nickname: nickname.slice(0, 80),
-    address,
-  };
-};
-
 const readAddressBook = async () => {
-  const file = await readFile(addressBookPath);
-  const workbook = XLSX.read(file, { type: 'buffer' });
-  const sheetName = workbook.Sheets['地址名单'] ? '地址名单' : workbook.SheetNames[0];
-  const sheet = workbook.Sheets[sheetName];
-
-  if (!sheet) {
-    return { addresses: [], invalidRows: [] };
-  }
-
-  const rows = XLSX.utils.sheet_to_json(sheet, {
-    header: 1,
-    raw: false,
-    defval: '',
-  });
-
-  const parsed = rows.slice(1).map((row, index) => sanitizeAddressEntry({
-    nickname: row[0],
-    address: row[1],
-  }, index + 2));
-
-  return {
-    addresses: parsed.filter((item) => item && !item.invalid),
-    invalidRows: parsed.filter((item) => item?.invalid),
-  };
+  const file = await readAddressBookBuffer();
+  return parseAddressBookBuffer(file);
 };
 
 const handleRecentTransactions = async (req, res) => {
@@ -770,6 +883,36 @@ const handleGetAddressBook = async (res) => {
       invalidRows: [],
       message: '读取地址名单 Excel 失败。',
       detail: error.message,
+    });
+  }
+};
+
+const handleUploadAddressBook = async (req, res) => {
+  try {
+    await verifyAdminPassword(req);
+
+    const fileName = decodeURIComponent(String(getHeaderValue(req, 'x-file-name') || 'address-book.xlsx'));
+    const contentType = getHeaderValue(req, 'content-type');
+    const buffer = await readRequestBuffer(req, ADDRESS_BOOK_UPLOAD_LIMIT);
+    const parsed = validateAddressBookUpload({
+      buffer,
+      fileName,
+      contentType,
+      maxBytes: ADDRESS_BOOK_UPLOAD_LIMIT,
+    });
+    const persistence = await persistAddressBookUpload(buffer);
+
+    json(res, 200, {
+      message: persistence.mode === 'github'
+        ? '名单已上传，正在通过 GitHub 和 Vercel 更新网站。'
+        : '名单已更新。',
+      addresses: parsed.addresses.length,
+      invalidRows: parsed.invalidRows.length,
+      persistence,
+    });
+  } catch (error) {
+    json(res, error.statusCode || 500, {
+      message: error.statusCode ? error.message : '上传名单失败，请稍后再试。',
     });
   }
 };
@@ -826,7 +969,7 @@ const handleVersion = async (res) => {
 
 const serveAddressBookFile = async (req, res) => {
   try {
-    const data = await readFile(addressBookPath);
+    const data = await readAddressBookBuffer();
     res.writeHead(200, {
       'content-type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
       'content-disposition': 'attachment; filename="address-book.xlsx"',
@@ -891,6 +1034,11 @@ const server = createServer(async (req, res) => {
 
   if (req.method === 'GET' && url.pathname === '/api/address-book') {
     await handleGetAddressBook(res);
+    return;
+  }
+
+  if (req.method === 'POST' && url.pathname === '/api/address-book/upload') {
+    await handleUploadAddressBook(req, res);
     return;
   }
 
