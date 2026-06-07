@@ -14,6 +14,31 @@ const createAddressBookError = (message, statusCode = 400) => {
   return error;
 };
 
+const normalizeHeaderCell = (value) => String(value || '').trim().toLowerCase().replace(/\s+/g, '');
+
+const nicknameHeaderNames = new Set([
+  '昵称',
+  '姓名',
+  '名字',
+  '名称',
+  'nickname',
+  'name',
+]);
+
+const addressHeaderNames = new Set([
+  '地址',
+  '钱包地址',
+  '钱包',
+  'address',
+  'wallet',
+  'walletaddress',
+]);
+
+const hasAddressBookHeader = (row = []) => (
+  nicknameHeaderNames.has(normalizeHeaderCell(row[0]))
+  && addressHeaderNames.has(normalizeHeaderCell(row[1]))
+);
+
 export const sanitizeAddressEntry = (entry, rowNumber) => {
   const nickname = String(entry?.nickname || '').trim();
   const address = String(entry?.address || '').trim();
@@ -58,10 +83,14 @@ export const parseAddressBookBuffer = (buffer) => {
     defval: '',
   });
 
-  const parsed = rows.slice(1).map((row, index) => sanitizeAddressEntry({
+  const dataRows = hasAddressBookHeader(rows[0])
+    ? rows.slice(1).map((row, index) => ({ row, rowNumber: index + 2 }))
+    : rows.map((row, index) => ({ row, rowNumber: index + 1 }));
+
+  const parsed = dataRows.map(({ row, rowNumber }) => sanitizeAddressEntry({
     nickname: row[0],
     address: row[1],
-  }, index + 2));
+  }, rowNumber));
 
   return {
     addresses: parsed.filter((item) => item && !item.invalid),
